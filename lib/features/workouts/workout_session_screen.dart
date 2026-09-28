@@ -22,10 +22,13 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   final repo = WorkoutRepository();
   final stopwatch = Stopwatch();
   Timer? timer;
+  Timer? restTimer;
   int? sessionId;
   bool loading = true;
   bool finishing = false;
-  final Map<int, int> setCounters = {};
+  int restSeconds = 0;
+  int defaultRestSeconds = 90;
+  List<Map<String, Object?>> sets = [];
 
   @override
   void initState() {
@@ -49,6 +52,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   @override
   void dispose() {
     timer?.cancel();
+    restTimer?.cancel();
     super.dispose();
   }
 
@@ -60,6 +64,43 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     return '$h:$m:$s';
   }
 
+  String get restLabel {
+    final m = (restSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (restSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Future<void> _reloadSets() async {
+    if (sessionId == null) return;
+    final data = await repo.getSessionSets(sessionId!);
+    if (mounted) setState(() => sets = data);
+  }
+
+  int _completedFor(int exerciseId) =>
+      sets.where((s) => s['exercise_id'] == exerciseId).length;
+
+  void _startRestTimer() {
+    restTimer?.cancel();
+    setState(() => restSeconds = defaultRestSeconds);
+    restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      if (restSeconds <= 1) {
+        t.cancel();
+        setState(() => restSeconds = 0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('زمان استراحت تمام شد؛ آماده ست بعدی هستی.')),
+        );
+      } else {
+        setState(() => restSeconds--);
+      }
+    });
+  }
+
+  void _skipRest() {
+    restTimer?.cancel();
+    setState(() => restSeconds = 0);
+  }
+
   Future<void> _addSet(Map<String, Object?> exercise) async {
     if (sessionId == null) return;
 
@@ -67,7 +108,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     final weight = TextEditingController();
     final rpe = TextEditingController();
     final exerciseId = exercise['exercise_id'] as int;
-    final nextSet = (setCounters[exerciseId] ?? 0) + 1;
+    final nextSet = _completedFor(exerciseId) + 1;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -144,14 +185,75 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       ),
     );
 
-    if (saved == true && mounted) {
-      setState(() => setCounters[exerciseId] = nextSet);
+    if (saved == true) {
+      await _reloadSets();
+      _startRestTimer();
     }
+  }
+
+  Future<void> _editSet(Map<String, Object?> set) async {
+    final reps = TextEditingController(text: '${set['reps'] ?? ''}');
+    final weight = TextEditingController(text: '${set['weight'] ?? ''}');
+    final rpe = TextEditingController(text: '${set['rpe'] ?? ''}');
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
+              ]),
+              const SizedBox(height: 12),
+              TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE')),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () async {
+                  await repo.updateSet(
+                    setId: set['id'] as int,
+                    reps: int.tryParse(reps.text.trim()),
+                    weight: double.tryParse(weight.text.trim()),
+                    rpe: double.tryParse(rpe.text.trim()),
+                  );
+                  if (context.mounted) Navigator.pop(context);
+                },
+                child: const Text('ذخیره تغییرات'),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  await repo.deleteSet(set['id'] as int);
+                  if (context.mounted) Navigator.pop(context);
+                },
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('حذف ست'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await _reloadSets();
   }
 
   Future<void> _finish() async {
     if (sessionId == null || finishing) return;
     setState(() => finishing = true);
+    restTimer?.cancel();
     await repo.finishSession(sessionId!);
     stopwatch.stop();
     timer?.cancel();
@@ -169,73 +271,102 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
           actions: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(
-                child: Text(
-                  elapsed,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
+              child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800))),
             ),
           ],
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
-            : ListView.separated(
-                padding: const EdgeInsets.all(20),
-                itemCount: widget.exercises.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final exercise = widget.exercises[index];
-                  final exerciseId = exercise['exercise_id'] as int;
-                  final completed = setCounters[exerciseId] ?? 0;
-                  final targetSets = exercise['target_sets'] as int?;
-                  final targetReps = exercise['target_reps'] as String?;
-
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+            : Column(
+                children: [
+                  if (restSeconds > 0)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                child: Text('${index + 1}'),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      exercise['name'] as String,
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${targetSets ?? '—'} ست • ${targetReps ?? '—'} تکرار',
-                                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '$completed/${targetSets ?? '—'}',
-                                style: const TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                            ],
+                          const Icon(Icons.timer_outlined),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('استراحت', style: TextStyle(fontWeight: FontWeight.w800)),
+                                Text(restLabel, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          FilledButton.tonalIcon(
-                            onPressed: () => _addSet(exercise),
-                            icon: const Icon(Icons.add_rounded),
-                            label: Text('ثبت ست ${completed + 1}'),
-                          ),
+                          IconButton(onPressed: () => setState(() => restSeconds += 30), icon: const Icon(Icons.add_rounded)),
+                          IconButton(onPressed: _skipRest, icon: const Icon(Icons.skip_next_rounded)),
                         ],
                       ),
                     ),
-                  );
-                },
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: widget.exercises.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final exercise = widget.exercises[index];
+                        final exerciseId = exercise['exercise_id'] as int;
+                        final exerciseSets = sets.where((s) => s['exercise_id'] == exerciseId).toList();
+                        final completed = exerciseSets.length;
+                        final targetSets = exercise['target_sets'] as int?;
+                        final targetReps = exercise['target_reps'] as String?;
+
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(child: Text('${index + 1}')),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                                          const SizedBox(height: 4),
+                                          Text('${targetSets ?? '—'} ست • ${targetReps ?? '—'} تکرار', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                        ],
+                                      ),
+                                    ),
+                                    Text('$completed/${targetSets ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                                  ],
+                                ),
+                                if (exerciseSets.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  ...exerciseSets.map((set) => ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
+                                        title: Text('${set['reps'] ?? '—'} تکرار × ${set['weight'] ?? '—'} kg'),
+                                        subtitle: set['rpe'] == null ? null : Text('RPE ${set['rpe']}'),
+                                        trailing: const Icon(Icons.edit_outlined, size: 20),
+                                        onTap: () => _editSet(set),
+                                      )),
+                                ],
+                                const SizedBox(height: 12),
+                                FilledButton.tonalIcon(
+                                  onPressed: () => _addSet(exercise),
+                                  icon: const Icon(Icons.add_rounded),
+                                  label: Text('ثبت ست ${completed + 1}'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.all(16),
