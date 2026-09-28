@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -6,11 +8,39 @@ import 'core/notifications/workout_reminder_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/home_screen.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await AppDatabase.instance.database;
-  await WorkoutReminderService.instance.initialize();
-  runApp(const TamrinoApp());
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+
+  runZonedGuarded(
+    () {
+      runApp(const TamrinoApp());
+      unawaited(_warmUpServices());
+    },
+    (error, stack) {
+      debugPrint('Uncaught startup error: $error');
+      debugPrintStack(stackTrace: stack);
+    },
+  );
+}
+
+Future<void> _warmUpServices() async {
+  try {
+    await AppDatabase.instance.database;
+  } catch (error, stack) {
+    debugPrint('Database warm-up failed: $error');
+    debugPrintStack(stackTrace: stack);
+  }
+
+  try {
+    await WorkoutReminderService.instance.initialize();
+  } catch (error, stack) {
+    debugPrint('Notification warm-up failed: $error');
+    debugPrintStack(stackTrace: stack);
+  }
 }
 
 class TamrinoApp extends StatelessWidget {
