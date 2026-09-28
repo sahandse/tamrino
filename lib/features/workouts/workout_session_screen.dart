@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/branding/tamrino_logo.dart';
 import '../../core/database/active_session_repository.dart';
+import '../../core/database/advanced_workout_repository.dart';
 import '../../core/database/workout_repository.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
@@ -26,6 +28,8 @@ class WorkoutSessionScreen extends StatefulWidget {
 class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   final repo = WorkoutRepository();
   final activeRepo = ActiveSessionRepository();
+  final advanced = AdvancedWorkoutRepository();
+
   Timer? timer;
   Timer? restTimer;
   int? sessionId;
@@ -34,6 +38,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   bool finishing = false;
   int restSeconds = 0;
   List<Map<String, Object?>> sets = [];
+  List<Map<String, Object?>> sessionExercises = [];
   final Map<int, List<Map<String, Object?>>> previousSets = {};
 
   @override
@@ -43,18 +48,23 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   }
 
   Future<void> _start() async {
-    sessionId = widget.existingSessionId ?? await activeRepo.startOrReuseSession(widget.plan['id'] as int);
+    final planId = widget.plan['id'] as int;
+    sessionId = widget.existingSessionId ?? await activeRepo.startOrReuseSession(planId);
     if (widget.existingStartedAt != null) {
       startedAt = widget.existingStartedAt;
     } else {
       final active = await activeRepo.getActiveSession();
       startedAt = DateTime.tryParse(active?['started_at'] as String? ?? '') ?? DateTime.now();
     }
+
+    await advanced.ensureSessionExercises(sessionId: sessionId!, planId: planId);
+    sessionExercises = await advanced.getSessionExercises(sessionId!);
     sets = await repo.getSessionSets(sessionId!);
-    for (final exercise in widget.exercises) {
+    for (final exercise in sessionExercises) {
       final exerciseId = exercise['exercise_id'] as int;
       previousSets[exerciseId] = await repo.getLastExerciseSets(exerciseId);
     }
+
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -90,6 +100,16 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     if (mounted) setState(() => sets = data);
   }
 
+  Future<void> _reloadSessionExercises() async {
+    if (sessionId == null) return;
+    final data = await advanced.getSessionExercises(sessionId!);
+    for (final exercise in data) {
+      final id = exercise['exercise_id'] as int;
+      previousSets[id] ??= await repo.getLastExerciseSets(id);
+    }
+    if (mounted) setState(() => sessionExercises = data);
+  }
+
   int _completedFor(int exerciseId) => sets.where((s) => s['exercise_id'] == exerciseId).length;
 
   void _startRestTimer(int seconds) {
@@ -114,6 +134,147 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   void _skipRest() {
     restTimer?.cancel();
     setState(() => restSeconds = 0);
+  }
+
+  Future<Map<String, Object?>?> _pickExercise({int? excludingId}) async {
+    final all = await repo.getExercises();
+    if (!mounted) return null;
+    final inSession = sessionExercises.map((e) => e['exercise_id'] as int).toSet();
+    final available = all.where((e) {
+      final id = e['id'] as int;
+      if (id == excludingId) return false;
+      return !inSession.contains(id) || excludingId != null;
+    }).toList();
+
+    return showModalBottomSheet<Map<String, Object?>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * .72,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                child: Row(children: [
+                  const TamrinoLogo(size: 34),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('انتخاب حرکت', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
+                ]),
+              ),
+              Expanded(
+                child: available.isEmpty
+                    ? const Center(child: Text('حرکت دیگری وجود ندارد.'))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: available.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final exercise = available[index];
+                          return ListTile(
+                            leading: CircleAvatar(child: Icon(exercise['is_favorite'] == 1 ? Icons.star_rounded : Icons.fitness_center_rounded)),
+                            title: Text(exercise['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
+                            subtitle: Text([exercise['muscle_group'], exercise['equipment']].whereType<String>().where((e) => e.isNotEmpty).join(' • ')),
+                            onTap: () => Navigator.pop(context, exercise),
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addExerciseMidSession() async {
+    if (sessionId == null) return;
+    final picked = await _pickExercise();
+    if (picked == null) return;
+    await advanced.addExerciseToSession(
+      sessionId: sessionId!,
+      exerciseId: picked['id'] as int,
+      targetReps: picked['exercise_mode'] == 'timed' ? null : '8-12',
+    );
+    await _reloadSessionExercises();
+  }
+
+  Future<void> _swapExercise(Map<String, Object?> exercise) async {
+    final oldId = exercise['exercise_id'] as int;
+    final picked = await _pickExercise(excludingId: oldId);
+    if (picked == null) return;
+    final logged = sets.any((s) => s['exercise_id'] == oldId);
+    if (logged && mounted) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('تعویض حرکت؟'),
+          content: const Text('ست‌های ثبت‌شده قبلی با نام حرکت قبلی در تاریخچه می‌مانند و ادامه جلسه با حرکت جدید انجام می‌شود.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('تعویض')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await advanced.swapSessionExercise(
+      sessionExerciseId: exercise['id'] as int,
+      newExerciseId: picked['id'] as int,
+    );
+    previousSets[picked['id'] as int] = await repo.getLastExerciseSets(picked['id'] as int);
+    await _reloadSessionExercises();
+  }
+
+  Future<void> _removeExercise(Map<String, Object?> exercise) async {
+    if (sessionId == null) return;
+    final exerciseId = exercise['exercise_id'] as int;
+    final hasSets = sets.any((s) => s['exercise_id'] == exerciseId);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف حرکت از این جلسه'),
+        content: Text(hasSets ? 'برای ست‌هایی که قبلاً ثبت شده‌اند چه کاری انجام شود؟' : 'این حرکت فقط از همین جلسه حذف می‌شود و برنامه اصلی تغییر نمی‌کند.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          if (hasSets) TextButton(onPressed: () => Navigator.pop(context, 'keep'), child: const Text('نگه‌داشتن ست‌ها')),
+          FilledButton(onPressed: () => Navigator.pop(context, hasSets ? 'delete' : 'remove'), child: Text(hasSets ? 'حذف همراه ست‌ها' : 'حذف')),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await advanced.removeExerciseFromSession(
+      sessionExerciseId: exercise['id'] as int,
+      sessionId: sessionId!,
+      exerciseId: exerciseId,
+      removeLoggedSets: result == 'delete',
+    );
+    await _reloadSets();
+    await _reloadSessionExercises();
+  }
+
+  Future<void> _setBarWeight(Map<String, Object?> exercise) async {
+    final controller = TextEditingController(text: exercise['bar_weight'] == null ? '20' : '${exercise['bar_weight']}');
+    final value = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('وزن میله'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'کیلوگرم', hintText: 'مثلاً 20'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(context, double.tryParse(controller.text.trim())), child: const Text('ذخیره')),
+        ],
+      ),
+    );
+    if (value == null || value <= 0) return;
+    await advanced.setBarWeight(exercise['id'] as int, value);
+    await _reloadSessionExercises();
   }
 
   Future<void> _editSessionNotes() async {
@@ -195,91 +356,134 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     var setType = 'normal';
     final bodyweight = exercise['is_bodyweight'] == 1;
     final perSide = exercise['per_side'] == 1;
+    final barWeight = (exercise['bar_weight'] as num?)?.toDouble();
 
     final previous = previousSets[exerciseId] ?? const [];
-    Map<String, Object?>? suggestion;
+    Map<String, Object?>? previousSuggestion;
     if (previous.isNotEmpty) {
-      suggestion = previous[(nextSet - 1).clamp(0, previous.length - 1)];
-      if (suggestion['reps'] != null) reps.text = '${suggestion['reps']}';
-      if (suggestion['weight'] != null) weight.text = '${suggestion['weight']}';
-      if (suggestion['rpe'] != null) rpe.text = '${suggestion['rpe']}';
+      previousSuggestion = previous[(nextSet - 1).clamp(0, previous.length - 1)];
+      if (previousSuggestion['reps'] != null) reps.text = '${previousSuggestion['reps']}';
+      if (previousSuggestion['weight'] != null) weight.text = '${previousSuggestion['weight']}';
+      if (previousSuggestion['rpe'] != null) rpe.text = '${previousSuggestion['rpe']}';
     }
+
+    final loadSuggestion = await advanced.getLoadSuggestion(
+      exerciseId: exerciseId,
+      plan: widget.plan,
+      targetReps: exercise['target_reps'] as String?,
+    );
+    if (loadSuggestion != null) weight.text = '${loadSuggestion.weight}';
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, modalSetState) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: Padding(
-            padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text('ست $nextSet${perSide ? ' • تکرار برای هر سمت' : ''}'),
-                if (suggestion != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
-                    child: Text('جلسه قبل: ${suggestion['reps'] ?? '—'} تکرار${suggestion['weight'] != null ? ' • ${suggestion['weight']} kg' : ''}'),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: setType,
-                  decoration: const InputDecoration(labelText: 'نوع ست'),
-                  items: const [
-                    DropdownMenuItem(value: 'normal', child: Text('معمولی')),
-                    DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
-                    DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
-                    DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
-                    DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
+        builder: (context, modalSetState) {
+          final currentWeight = double.tryParse(weight.text.trim());
+          final plates = barWeight != null && currentWeight != null
+              ? advanced.calculatePlates(totalWeight: currentWeight, barWeight: barWeight)
+              : null;
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Padding(
+              padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    const TamrinoLogo(size: 34),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text('ست $nextSet${perSide ? ' • تکرار برای هر سمت' : ''}'),
+                  if (loadSuggestion != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(16)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('پیشنهاد اختیاری', style: TextStyle(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 3),
+                        Text('${loadSuggestion.weight} kg • ${loadSuggestion.reason}'),
+                      ]),
+                    ),
+                  ] else if (previousSuggestion != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
+                      child: Text('جلسه قبل: ${previousSuggestion['reps'] ?? '—'} تکرار${previousSuggestion['weight'] != null ? ' • ${previousSuggestion['weight']} kg' : ''}'),
+                    ),
                   ],
-                  onChanged: (value) {
-                    if (value != null) modalSetState(() => setType = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: perSide ? 'تکرار هر سمت' : 'تکرار'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: TextField(
-                    controller: weight,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: bodyweight ? 'وزنه اضافه (kg)' : 'وزنه (kg)'),
-                  )),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: setType,
+                    decoration: const InputDecoration(labelText: 'نوع ست'),
+                    items: const [
+                      DropdownMenuItem(value: 'normal', child: Text('معمولی')),
+                      DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
+                      DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
+                      DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) modalSetState(() => setType = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: perSide ? 'تکرار هر سمت' : 'تکرار'))),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(
+                      controller: weight,
+                      onChanged: (_) => modalSetState(() {}),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(labelText: bodyweight ? 'وزنه اضافه (kg)' : 'وزنه (kg)'),
+                    )),
+                  ]),
+                  if (plates != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16)),
+                      child: Row(children: [
+                        const Icon(Icons.fitness_center_rounded),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(plates.platesPerSide.isEmpty
+                            ? 'فقط میله $barWeight kg'
+                            : 'هر سمت: ${plates.platesPerSide.map((e) => '${e}kg').join(' + ')}${plates.exact ? '' : ' • باقیمانده ${plates.remainder.toStringAsFixed(1)}kg'}')),
+                      ]),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE (اختیاری)')),
+                  const SizedBox(height: 12),
+                  TextField(controller: superset, decoration: const InputDecoration(labelText: 'گروه سوپرست (اختیاری)', hintText: 'مثلاً A')),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final repValue = int.tryParse(reps.text.trim());
+                      if (repValue == null || repValue <= 0) return;
+                      await repo.addSet(
+                        sessionId: sessionId!,
+                        exerciseId: exerciseId,
+                        setNumber: nextSet,
+                        reps: repValue,
+                        weight: double.tryParse(weight.text.trim()),
+                        rpe: double.tryParse(rpe.text.trim()),
+                        setType: setType,
+                        supersetGroup: superset.text,
+                      );
+                      if (context.mounted) Navigator.pop(context, true);
+                    },
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('ثبت ست'),
+                  ),
                 ]),
-                const SizedBox(height: 12),
-                TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE (اختیاری)')),
-                const SizedBox(height: 12),
-                TextField(controller: superset, decoration: const InputDecoration(labelText: 'گروه سوپرست (اختیاری)', hintText: 'مثلاً A')),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final repValue = int.tryParse(reps.text.trim());
-                    if (repValue == null || repValue <= 0) return;
-                    await repo.addSet(
-                      sessionId: sessionId!,
-                      exerciseId: exerciseId,
-                      setNumber: nextSet,
-                      reps: repValue,
-                      weight: double.tryParse(weight.text.trim()),
-                      rpe: double.tryParse(rpe.text.trim()),
-                      setType: setType,
-                      supersetGroup: superset.text,
-                    );
-                    if (context.mounted) Navigator.pop(context, true);
-                  },
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('ثبت ست'),
-                ),
-              ]),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     if (saved == true) {
@@ -315,7 +519,6 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                   DropdownMenuItem(value: 'normal', child: Text('معمولی')),
                   DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
                   DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
-                  DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
                   DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
                 ],
                 onChanged: (value) {
@@ -374,16 +577,11 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
   String _setTypeLabel(String? type) {
     switch (type) {
-      case 'warmup':
-        return 'گرم‌کردن';
-      case 'drop':
-        return 'دراپ‌ست';
-      case 'failure':
-        return 'تا ناتوانی';
-      case 'rest_pause':
-        return 'Rest-Pause';
-      default:
-        return 'معمولی';
+      case 'warmup': return 'گرم‌کردن';
+      case 'drop': return 'دراپ‌ست';
+      case 'rest_pause': return 'Rest-Pause';
+      case 'failure': return 'ست سنگین';
+      default: return 'معمولی';
     }
   }
 
@@ -397,9 +595,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     final side = set['per_side'] == 1 ? ' هر سمت' : '';
     final weight = set['weight'];
     final bodyweight = set['is_bodyweight'] == 1;
-    if (bodyweight) {
-      return '$reps تکرار$side${weight != null ? ' • +$weight kg' : ' • وزن بدن'}';
-    }
+    if (bodyweight) return '$reps تکرار$side${weight != null ? ' • +$weight kg' : ' • وزن بدن'}';
     return '$reps تکرار$side × ${weight ?? '—'} kg';
   }
 
@@ -409,11 +605,17 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.plan['name'] as String),
+          titleSpacing: 10,
+          title: Row(children: [
+            const TamrinoLogo(size: 34),
+            const SizedBox(width: 9),
+            Expanded(child: Text(widget.plan['name'] as String, overflow: TextOverflow.ellipsis)),
+          ]),
           actions: [
+            IconButton(onPressed: _addExerciseMidSession, icon: const Icon(Icons.add_circle_outline_rounded), tooltip: 'افزودن حرکت'),
             IconButton(onPressed: _editSessionNotes, icon: const Icon(Icons.sticky_note_2_outlined), tooltip: 'یادداشت جلسه'),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800))),
             ),
           ],
@@ -438,67 +640,82 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                     ]),
                   ),
                 Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: widget.exercises.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final exercise = widget.exercises[index];
-                      final exerciseId = exercise['exercise_id'] as int;
-                      final exerciseSets = sets.where((s) => s['exercise_id'] == exerciseId).toList();
-                      final targetSets = exercise['target_sets'] as int?;
-                      final rest = (exercise['rest_seconds'] as num?)?.toInt() ?? 90;
-                      final timed = exercise['exercise_mode'] == 'timed';
-                      final bodyweight = exercise['is_bodyweight'] == 1;
-                      final perSide = exercise['per_side'] == 1;
-                      final tags = <String>[
-                        timed ? 'زمانی' : 'تکراری',
-                        if (bodyweight) 'وزن بدن',
-                        if (perSide) 'هر سمت',
-                        'استراحت ${rest}s',
-                      ];
+                  child: sessionExercises.isEmpty
+                      ? Center(child: FilledButton.icon(onPressed: _addExerciseMidSession, icon: const Icon(Icons.add_rounded), label: const Text('افزودن اولین حرکت')))
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: sessionExercises.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final exercise = sessionExercises[index];
+                            final exerciseId = exercise['exercise_id'] as int;
+                            final exerciseSets = sets.where((s) => s['exercise_id'] == exerciseId).toList();
+                            final targetSets = exercise['target_sets'] as int?;
+                            final rest = (exercise['rest_seconds'] as num?)?.toInt() ?? 90;
+                            final timed = exercise['exercise_mode'] == 'timed';
+                            final bodyweight = exercise['is_bodyweight'] == 1;
+                            final perSide = exercise['per_side'] == 1;
+                            final barWeight = exercise['bar_weight'];
+                            final tags = <String>[
+                              timed ? 'زمانی' : 'تکراری',
+                              if (bodyweight) 'وزن بدن',
+                              if (perSide) 'هر سمت',
+                              if (barWeight != null) 'میله ${barWeight}kg',
+                              'استراحت ${rest}s',
+                            ];
 
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                            Row(children: [
-                              CircleAvatar(child: Text('${index + 1}')),
-                              const SizedBox(width: 12),
-                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                                const SizedBox(height: 4),
-                                Text(tags.join(' • '), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                              ])),
-                              Text('${exerciseSets.length}/${targetSets ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                            ]),
-                            if (exerciseSets.isNotEmpty) ...[
-                              const SizedBox(height: 14),
-                              ...exerciseSets.map((set) => ListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
-                                    title: Text(_setTitle(set)),
-                                    subtitle: Text([
-                                      _setTypeLabel(set['set_type'] as String?),
-                                      if (set['rpe'] != null) 'RPE ${set['rpe']}',
-                                      if (set['superset_group'] != null) 'سوپرست ${set['superset_group']}',
-                                    ].join(' • ')),
-                                    trailing: const Icon(Icons.edit_outlined, size: 20),
-                                    onTap: () => _editSet(set),
-                                  )),
-                            ],
-                            const SizedBox(height: 12),
-                            FilledButton.tonalIcon(
-                              onPressed: () => _addSet(exercise),
-                              icon: Icon(timed ? Icons.timer_rounded : Icons.add_rounded),
-                              label: Text(timed ? 'شروع ست زمانی ${exerciseSets.length + 1}' : 'ثبت ست ${exerciseSets.length + 1}'),
-                            ),
-                          ]),
+                            return Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                  Row(children: [
+                                    CircleAvatar(child: Text('${index + 1}')),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 4),
+                                      Text(tags.join(' • '), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                    ])),
+                                    PopupMenuButton<String>(
+                                      onSelected: (value) {
+                                        if (value == 'swap') _swapExercise(exercise);
+                                        if (value == 'remove') _removeExercise(exercise);
+                                        if (value == 'bar') _setBarWeight(exercise);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(value: 'swap', child: Text('تعویض حرکت')),
+                                        PopupMenuItem(value: 'bar', child: Text('وزن میله / Plate Math')),
+                                        PopupMenuItem(value: 'remove', child: Text('حذف از همین جلسه')),
+                                      ],
+                                    ),
+                                  ]),
+                                  if (exerciseSets.isNotEmpty) ...[
+                                    const SizedBox(height: 14),
+                                    ...exerciseSets.map((set) => ListTile(
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
+                                          title: Text(_setTitle(set)),
+                                          subtitle: Text([
+                                            _setTypeLabel(set['set_type'] as String?),
+                                            if (set['rpe'] != null) 'RPE ${set['rpe']}',
+                                            if (set['superset_group'] != null) 'سوپرست ${set['superset_group']}',
+                                          ].join(' • ')),
+                                          trailing: const Icon(Icons.edit_outlined, size: 20),
+                                          onTap: () => _editSet(set),
+                                        )),
+                                  ],
+                                  const SizedBox(height: 12),
+                                  FilledButton.tonalIcon(
+                                    onPressed: () => _addSet(exercise),
+                                    icon: Icon(timed ? Icons.timer_rounded : Icons.add_rounded),
+                                    label: Text(timed ? 'شروع ست زمانی ${exerciseSets.length + 1}' : 'ثبت ست ${exerciseSets.length + 1}'),
+                                  ),
+                                ]),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ]),
         bottomNavigationBar: SafeArea(
@@ -523,13 +740,7 @@ class _TimedSetDraft {
 }
 
 class _TimedSetSheet extends StatefulWidget {
-  const _TimedSetSheet({
-    required this.exerciseName,
-    required this.setNumber,
-    required this.allowWeight,
-    this.suggestedSeconds,
-  });
-
+  const _TimedSetSheet({required this.exerciseName, required this.setNumber, required this.allowWeight, this.suggestedSeconds});
   final String exerciseName;
   final int setNumber;
   final bool allowWeight;
@@ -587,7 +798,11 @@ class _TimedSetSheetState extends State<_TimedSetSheet> {
         padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(widget.exerciseName, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+            Row(children: [
+              const TamrinoLogo(size: 34),
+              const SizedBox(width: 10),
+              Expanded(child: Text(widget.exerciseName, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
+            ]),
             Text('ست زمانی ${widget.setNumber}'),
             const SizedBox(height: 18),
             Container(
@@ -601,8 +816,7 @@ class _TimedSetSheetState extends State<_TimedSetSheet> {
                   icon: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded),
                   label: Text(running ? 'توقف' : 'شروع تایمر'),
                 ),
-                if (!running && seconds > 0)
-                  TextButton(onPressed: () => setState(() => seconds = 0), child: const Text('صفر کردن')),
+                if (!running && seconds > 0) TextButton(onPressed: () => setState(() => seconds = 0), child: const Text('صفر کردن')),
               ]),
             ),
             if (widget.suggestedSeconds != null) ...[
@@ -616,7 +830,6 @@ class _TimedSetSheetState extends State<_TimedSetSheet> {
               items: const [
                 DropdownMenuItem(value: 'normal', child: Text('معمولی')),
                 DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
-                DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
                 DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
               ],
               onChanged: (value) {
@@ -635,15 +848,12 @@ class _TimedSetSheetState extends State<_TimedSetSheet> {
                   ? null
                   : () {
                       timer?.cancel();
-                      Navigator.pop(
-                        context,
-                        _TimedSetDraft(
-                          seconds: seconds,
-                          weight: double.tryParse(weight.text.trim()),
-                          rpe: double.tryParse(rpe.text.trim()),
-                          setType: setType,
-                        ),
-                      );
+                      Navigator.pop(context, _TimedSetDraft(
+                        seconds: seconds,
+                        weight: double.tryParse(weight.text.trim()),
+                        rpe: double.tryParse(rpe.text.trim()),
+                        setType: setType,
+                      ));
                     },
               icon: const Icon(Icons.check_rounded),
               label: const Text('ثبت ست زمانی'),
