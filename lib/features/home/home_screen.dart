@@ -35,16 +35,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: SafeArea(child: pages[index]),
+        body: SafeArea(child: IndexedStack(index: index, children: pages)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: index,
           onDestinationSelected: (value) => setState(() => index = value),
           destinations: const [
-            NavigationDestination(icon: TamrinoLogo(size: 25), selectedIcon: TamrinoLogo(size: 28), label: 'خانه'),
-            NavigationDestination(icon: Icon(Icons.fitness_center_outlined), label: 'تمرین'),
-            NavigationDestination(icon: Icon(Icons.sports_gymnastics_outlined), label: 'حرکات'),
-            NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'پیشرفت'),
-            NavigationDestination(icon: Icon(Icons.tune_outlined), label: 'بیشتر'),
+            NavigationDestination(icon: TamrinoLogo(size: 23), selectedIcon: TamrinoLogo(size: 26), label: 'خانه'),
+            NavigationDestination(icon: Icon(Icons.fitness_center_outlined), selectedIcon: Icon(Icons.fitness_center_rounded), label: 'تمرین'),
+            NavigationDestination(icon: Icon(Icons.sports_gymnastics_outlined), selectedIcon: Icon(Icons.sports_gymnastics_rounded), label: 'حرکات'),
+            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'پیشرفت'),
+            NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune_rounded), label: 'بیشتر'),
           ],
         ),
       ),
@@ -115,91 +115,111 @@ class _DashboardState extends State<_Dashboard> {
         final data = snapshot.data;
         final todayPlan = data?.plans.isNotEmpty == true ? data!.plans.first : null;
         final active = data?.active;
+
         return RefreshIndicator(
           onRefresh: () async => setState(() {}),
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
             children: [
               Row(children: [
-                const TamrinoLogo(size: 58),
-                const SizedBox(width: 12),
+                const TamrinoLogo(size: 44),
+                const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('تمرینو', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 4),
-                  Text('تمرین شخصی، آفلاین و خصوصی', style: TextStyle(color: colors.onSurfaceVariant)),
+                  Text('تمرینو', style: Theme.of(context).textTheme.headlineSmall),
+                  Text('تمرین امروزت، بدون شلوغی', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
                 ])),
-                IconButton.filledTonal(
+                IconButton(
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TrainingCalendarScreen())),
                   icon: const Icon(Icons.calendar_month_rounded),
+                  tooltip: 'تقویم',
                 ),
               ]),
               const SizedBox(height: 22),
               if (active != null) ...[
-                Card(
-                  color: colors.primaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Row(children: [
-                        const TamrinoLogo(size: 38),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text('جلسه تمرین فعال', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
-                      ]),
-                      const SizedBox(height: 8),
-                      Text(active['plan_name'] as String? ?? 'تمرین'),
-                      const SizedBox(height: 14),
-                      Row(children: [
-                        Expanded(child: FilledButton.icon(onPressed: () => _resumeActive(active), icon: const Icon(Icons.play_arrow_rounded), label: const Text('ادامه تمرین'))),
-                        const SizedBox(width: 10),
-                        IconButton.outlined(onPressed: () => _cancelActive(active), icon: const Icon(Icons.close_rounded), tooltip: 'لغو جلسه'),
-                      ]),
-                    ]),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: .09),
+                    borderRadius: BorderRadius.circular(18),
                   ),
+                  child: Row(children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(color: colors.primary, borderRadius: BorderRadius.circular(14)),
+                      child: Icon(Icons.play_arrow_rounded, color: colors.onPrimary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('جلسه فعال', style: TextStyle(fontWeight: FontWeight.w900)),
+                      Text(active['plan_name'] as String? ?? 'تمرین', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ])),
+                    TextButton(onPressed: () => _resumeActive(active), child: const Text('ادامه')),
+                    IconButton(onPressed: () => _cancelActive(active), icon: const Icon(Icons.close_rounded), tooltip: 'لغو'),
+                  ]),
                 ),
                 const SizedBox(height: 14),
               ],
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(22),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(todayPlan == null ? Icons.bolt_rounded : Icons.fitness_center_rounded, color: colors.primary, size: 30),
-                    const SizedBox(height: 14),
-                    Text(todayPlan == null ? 'برنامه امروز مشخص نشده' : 'تمرین امروز', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 6),
-                    Text(todayPlan == null ? 'از بخش تمرین برای برنامه‌ها روز هفته تعیین کن.' : todayPlan['name'] as String),
-                    if (todayPlan?['scheduled_date'] != null) ...[
-                      const SizedBox(height: 6),
-                      Text('برای همین هفته جابه‌جا شده', style: TextStyle(color: colors.primary, fontWeight: FontWeight.w700)),
-                    ],
-                    const SizedBox(height: 16),
-                    FilledButton.icon(onPressed: widget.onOpenWorkouts, icon: const Icon(Icons.arrow_back_rounded), label: Text(todayPlan == null ? 'مدیریت برنامه‌ها' : 'رفتن به تمرین')),
-                  ]),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: colors.outlineVariant.withValues(alpha: .45)),
                 ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(color: colors.primary.withValues(alpha: .1), borderRadius: BorderRadius.circular(14)),
+                      child: Icon(todayPlan == null ? Icons.bolt_rounded : Icons.fitness_center_rounded, color: colors.primary),
+                    ),
+                    const Spacer(),
+                    if (todayPlan?['scheduled_date'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: colors.primary.withValues(alpha: .09), borderRadius: BorderRadius.circular(12)),
+                        child: Text('جابجا شده', style: TextStyle(color: colors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
+                      ),
+                  ]),
+                  const SizedBox(height: 18),
+                  Text(todayPlan == null ? 'امروز برنامه‌ای نداری' : todayPlan['name'] as String, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 6),
+                  Text(
+                    todayPlan == null ? 'می‌توانی از تمرین آزاد شروع کنی یا برنامه هفتگی بسازی.' : 'همه‌چیز برای شروع آماده است.',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: widget.onOpenWorkouts,
+                    icon: Icon(todayPlan == null ? Icons.add_rounded : Icons.play_arrow_rounded),
+                    label: Text(todayPlan == null ? 'رفتن به تمرین‌ها' : 'شروع تمرین'),
+                  ),
+                ]),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 18),
               Row(children: [
-                Expanded(child: _MetricCard(icon: Icons.event_available_rounded, value: '${data?.summary['workout_count'] ?? 0}', label: 'کل تمرین‌ها')),
+                Expanded(child: _Metric(value: '${data?.summary['workout_count'] ?? 0}', label: 'تمرین')),
                 const SizedBox(width: 10),
-                Expanded(child: _MetricCard(icon: Icons.check_circle_outline_rounded, value: '${data?.summary['set_count'] ?? 0}', label: 'کل ست‌ها')),
+                Expanded(child: _Metric(value: '${data?.summary['set_count'] ?? 0}', label: 'ست')),
+                const SizedBox(width: 10),
+                Expanded(child: _Metric(value: _shortVolume(data?.summary['total_volume']), label: 'حجم')),
               ]),
-              const SizedBox(height: 10),
-              _MetricCard(icon: Icons.monitor_weight_outlined, value: _formatVolume(data?.summary['total_volume']), label: 'حجم کل تمرین'),
               if (data?.recent.isNotEmpty == true) ...[
-                const SizedBox(height: 18),
-                Text('آخرین تمرین', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 8),
-                Card(child: ListTile(
-                  leading: const CircleAvatar(child: TamrinoLogo(size: 24)),
-                  title: Text(data!.recent.first['plan_name'] as String? ?? 'تمرین'),
-                  subtitle: Text('${data.recent.first['set_count'] ?? 0} ست'),
-                )),
+                const SizedBox(height: 22),
+                Text('آخرین فعالیت', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                Card(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                    leading: const TamrinoLogo(size: 30),
+                    title: Text(data!.recent.first['plan_name'] as String? ?? 'تمرین'),
+                    subtitle: Text('${data.recent.first['set_count'] ?? 0} ست ثبت شده'),
+                    trailing: const Icon(Icons.chevron_left_rounded),
+                  ),
+                ),
               ],
-              const SizedBox(height: 14),
-              Card(child: ListTile(
-                leading: const TamrinoLogo(size: 34),
-                title: const Text('اطلاعاتت روی دستگاه می‌ماند'),
-                subtitle: const Text('تمرینو بدون حساب کاربری و بدون فضای ابری کار می‌کند.'),
-              )),
             ],
           ),
         );
@@ -207,9 +227,10 @@ class _DashboardState extends State<_Dashboard> {
     );
   }
 
-  String _formatVolume(Object? value) {
+  String _shortVolume(Object? value) {
     final n = value is num ? value.toDouble() : 0.0;
-    return '${n.toStringAsFixed(n % 1 == 0 ? 0 : 1)} kg';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}k';
+    return n.toStringAsFixed(n % 1 == 0 ? 0 : 1);
   }
 }
 
@@ -221,24 +242,25 @@ class _DashboardData {
   final Map<String, Object?>? active;
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.icon, required this.value, required this.label});
-  final IconData icon;
+class _Metric extends StatelessWidget {
+  const _Metric({required this.value, required this.label});
   final String value;
   final String label;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 12),
-        Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      ]),
-    ),
-  );
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .4)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 2),
+          Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ]),
+      );
 }
 
 class _SettingsPage extends StatefulWidget {
@@ -269,43 +291,73 @@ class _SettingsPageState extends State<_SettingsPage> {
   Widget build(BuildContext context) {
     final local = LocalBackupService();
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
       children: [
-        const TamrinoLogo(size: 54, showWordmark: true),
-        const SizedBox(height: 8),
-        Text('بیشتر', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
-        const SizedBox(height: 20),
-        Card(child: ListTile(
-          leading: const Icon(Icons.notifications_active_outlined),
-          title: const Text('یادآوری تمرین'),
-          subtitle: const Text('تنظیم اعلان هفتگی برای برنامه‌ها'),
-          trailing: const Icon(Icons.chevron_left_rounded),
+        Row(children: [
+          const TamrinoLogo(size: 42),
+          const SizedBox(width: 10),
+          Text('بیشتر', style: Theme.of(context).textTheme.headlineSmall),
+        ]),
+        const SizedBox(height: 22),
+        _SettingTile(
+          icon: Icons.notifications_none_rounded,
+          title: 'یادآوری تمرین',
+          subtitle: 'اعلان هفتگی برنامه‌ها',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkoutRemindersScreen())),
-        )),
-        const SizedBox(height: 14),
-        Card(child: Column(children: [
-          ListTile(
-            leading: const Icon(Icons.save_alt_rounded),
-            title: const Text('بکاپ محلی'),
-            subtitle: const Text('ذخیره فایل اطلاعات روی گوشی'),
-            onTap: busy ? null : () => run(() async { await local.exportBackup(); }, 'بکاپ محلی ساخته شد.'),
+        ),
+        const SizedBox(height: 10),
+        _SettingTile(
+          icon: Icons.save_alt_rounded,
+          title: 'بکاپ محلی',
+          subtitle: 'ذخیره فایل اطلاعات روی گوشی',
+          onTap: busy ? null : () => run(() async { await local.exportBackup(); }, 'بکاپ محلی ساخته شد.'),
+        ),
+        const SizedBox(height: 10),
+        _SettingTile(
+          icon: Icons.restore_rounded,
+          title: 'بازیابی بکاپ',
+          subtitle: 'برگرداندن اطلاعات از فایل',
+          onTap: busy ? null : () => run(local.restoreFromPicker, 'اطلاعات بازیابی شد.'),
+        ),
+        const SizedBox(height: 22),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(18),
           ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.restore_rounded),
-            title: const Text('بازیابی بکاپ محلی'),
-            subtitle: const Text('بازیابی اطلاعات از فایل بکاپ'),
-            onTap: busy ? null : () => run(local.restoreFromPicker, 'اطلاعات بازیابی شد.'),
-          ),
-        ])),
-        const SizedBox(height: 14),
-        const Card(child: ListTile(
-          leading: TamrinoLogo(size: 34),
-          title: Text('حریم خصوصی'),
-          subtitle: Text('اطلاعات تمرین فقط روی دستگاه ذخیره می‌شود و بکاپ ابری در برنامه وجود ندارد.'),
-        )),
+          child: Row(children: [
+            const TamrinoLogo(size: 34),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('کاملاً آفلاین', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 2),
+              Text('اطلاعات تمرین فقط روی دستگاه ذخیره می‌شود.', style: Theme.of(context).textTheme.bodySmall),
+            ])),
+          ]),
+        ),
         if (busy) ...[const SizedBox(height: 18), const Center(child: CircularProgressIndicator())],
       ],
     );
   }
+}
+
+class _SettingTile extends StatelessWidget {
+  const _SettingTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: Icon(icon),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_left_rounded),
+          onTap: onTap,
+        ),
+      );
 }
