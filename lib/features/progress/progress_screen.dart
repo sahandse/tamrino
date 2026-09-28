@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/database/workout_repository.dart';
+import 'body_metrics_screen.dart';
 import 'session_detail_screen.dart';
 
 class ProgressScreen extends StatefulWidget {
@@ -18,7 +19,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final sessions = await repo.getRecentSessions();
     final records = await repo.getPersonalRecords();
     final trend = await repo.getVolumeTrend();
-    return _ProgressData(summary, sessions, records, trend);
+    final activity = await repo.getActivityDays();
+    return _ProgressData(summary, sessions, records, trend, activity);
   }
 
   @override
@@ -33,7 +35,19 @@ class _ProgressScreenState extends State<ProgressScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Text('پیشرفت', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
+              Row(
+                children: [
+                  Expanded(child: Text('پیشرفت', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900))),
+                  FilledButton.tonalIcon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BodyMetricsScreen()));
+                      if (mounted) setState(() {});
+                    },
+                    icon: const Icon(Icons.monitor_weight_outlined),
+                    label: const Text('بدن'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               if (snapshot.connectionState == ConnectionState.waiting)
                 const Padding(
@@ -67,6 +81,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   value: '${_formatNumber(data.summary['total_volume'])} kg',
                   icon: Icons.monitor_weight_outlined,
                 ),
+                const SizedBox(height: 22),
+                Text('فعالیت ۱۲ هفته اخیر', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 12),
+                _ActivityHeatmap(items: data.activity),
                 const SizedBox(height: 22),
                 Text('روند حجم تمرین', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 12),
@@ -139,11 +157,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
 }
 
 class _ProgressData {
-  _ProgressData(this.summary, this.sessions, this.records, this.trend);
+  _ProgressData(this.summary, this.sessions, this.records, this.trend, this.activity);
   final Map<String, Object?> summary;
   final List<Map<String, Object?>> sessions;
   final List<Map<String, Object?>> records;
   final List<Map<String, Object?>> trend;
+  final List<Map<String, Object?>> activity;
 }
 
 class _SummaryCard extends StatelessWidget {
@@ -165,6 +184,49 @@ class _SummaryCard extends StatelessWidget {
             Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
             Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityHeatmap extends StatelessWidget {
+  const _ActivityHeatmap({required this.items});
+  final List<Map<String, Object?>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = <String, int>{
+      for (final item in items) item['day'] as String: (item['workout_count'] as num?)?.toInt() ?? 0,
+    };
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 83));
+    final primary = Theme.of(context).colorScheme.primary;
+    final empty = Theme.of(context).colorScheme.surfaceContainerHighest;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 5,
+          runSpacing: 5,
+          children: List.generate(84, (index) {
+            final day = start.add(Duration(days: index));
+            final key = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+            final count = counts[key] ?? 0;
+            final opacity = count == 0 ? 1.0 : (0.28 + (count.clamp(1, 4) * 0.18)).clamp(0.0, 1.0);
+            return Tooltip(
+              message: count == 0 ? 'بدون تمرین' : '$count تمرین',
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: count == 0 ? empty : primary.withValues(alpha: opacity),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );
