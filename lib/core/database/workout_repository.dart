@@ -51,6 +51,7 @@ class WorkoutRepository {
     required int exerciseId,
     int? targetSets,
     String? targetReps,
+    int restSeconds = 90,
   }) async {
     final db = await _db;
     final maxPosition = Sqflite.firstIntValue(await db.rawQuery(
@@ -65,7 +66,21 @@ class WorkoutRepository {
       'position': maxPosition + 1,
       'target_sets': targetSets,
       'target_reps': _emptyToNull(targetReps),
+      'rest_seconds': restSeconds.clamp(0, 900),
     });
+  }
+
+  Future<void> updateExerciseRestSeconds({
+    required int planExerciseId,
+    required int restSeconds,
+  }) async {
+    final db = await _db;
+    await db.update(
+      'plan_exercises',
+      {'rest_seconds': restSeconds.clamp(0, 900)},
+      where: 'id = ?',
+      whereArgs: [planExerciseId],
+    );
   }
 
   Future<List<Map<String, Object?>>> getPlanExercises(int planId) async {
@@ -94,6 +109,8 @@ class WorkoutRepository {
     int? reps,
     double? weight,
     double? rpe,
+    String setType = 'normal',
+    String? supersetGroup,
   }) async {
     final db = await _db;
     return db.insert('workout_sets', {
@@ -104,6 +121,8 @@ class WorkoutRepository {
       'weight': weight,
       'rpe': rpe,
       'completed': 1,
+      'set_type': _validSetType(setType),
+      'superset_group': _emptyToNull(supersetGroup),
       'created_at': DateTime.now().toIso8601String(),
     });
   }
@@ -113,11 +132,19 @@ class WorkoutRepository {
     int? reps,
     double? weight,
     double? rpe,
+    String? setType,
+    String? supersetGroup,
   }) async {
     final db = await _db;
     await db.update(
       'workout_sets',
-      {'reps': reps, 'weight': weight, 'rpe': rpe},
+      {
+        'reps': reps,
+        'weight': weight,
+        'rpe': rpe,
+        if (setType != null) 'set_type': _validSetType(setType),
+        'superset_group': _emptyToNull(supersetGroup),
+      },
       where: 'id = ?',
       whereArgs: [setId],
     );
@@ -165,6 +192,19 @@ class WorkoutRepository {
     ''', [limit]);
   }
 
+  Future<List<Map<String, Object?>>> getActivityDays({int days = 84}) async {
+    final db = await _db;
+    final from = DateTime.now().subtract(Duration(days: days - 1));
+    return db.rawQuery('''
+      SELECT substr(started_at, 1, 10) AS day,
+        COUNT(*) AS workout_count
+      FROM workout_sessions
+      WHERE finished_at IS NOT NULL AND started_at >= ?
+      GROUP BY substr(started_at, 1, 10)
+      ORDER BY day ASC
+    ''', [from.toIso8601String()]);
+  }
+
   Future<Map<String, Object?>> getProgressSummary() async {
     final db = await _db;
     final rows = await db.rawQuery('''
@@ -195,6 +235,7 @@ class WorkoutRepository {
       JOIN exercises e ON e.id = ws.exercise_id
       JOIN workout_sessions session ON session.id = ws.session_id
       WHERE session.finished_at IS NOT NULL
+        AND ws.set_type != 'warmup'
       GROUP BY e.id, e.name
       HAVING MAX(COALESCE(ws.weight, 0)) > 0
       ORDER BY estimated_1rm DESC
@@ -216,6 +257,11 @@ class WorkoutRepository {
       LIMIT ?
     ''', [limit]);
     return rows.reversed.toList();
+  }
+
+  String _validSetType(String value) {
+    const allowed = {'normal', 'warmup', 'drop', 'failure', 'rest_pause'};
+    return allowed.contains(value) ? value : 'normal';
   }
 
   String? _emptyToNull(String? value) {
