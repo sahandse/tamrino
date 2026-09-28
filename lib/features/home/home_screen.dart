@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../core/backup/google_drive_backup_service.dart';
 import '../../core/backup/local_backup_service.dart';
+import '../../core/database/active_session_repository.dart';
 import '../../core/database/workout_repository.dart';
 import '../exercises/exercises_screen.dart';
 import '../progress/progress_screen.dart';
 import '../progress/training_calendar_screen.dart';
+import '../settings/workout_reminders_screen.dart';
+import '../workouts/workout_session_screen.dart';
 import '../workouts/workouts_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -58,12 +61,47 @@ class _Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<_Dashboard> {
   final repo = WorkoutRepository();
+  final activeRepo = ActiveSessionRepository();
 
   Future<_DashboardData> _load() async {
     final summary = await repo.getProgressSummary();
     final plans = await repo.getPlansForWeekday(DateTime.now().weekday);
     final recent = await repo.getRecentSessions(limit: 1);
-    return _DashboardData(summary, plans, recent);
+    final active = await activeRepo.getActiveSession();
+    return _DashboardData(summary, plans, recent, active);
+  }
+
+  Future<void> _resumeActive(Map<String, Object?> active) async {
+    final planId = active['plan_id'] as int?;
+    if (planId == null) return;
+    final exercises = await repo.getPlanExercises(planId);
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => WorkoutSessionScreen(
+        plan: {'id': planId, 'name': active['plan_name'] ?? 'تمرین'},
+        exercises: exercises,
+        existingSessionId: active['id'] as int,
+        existingStartedAt: DateTime.tryParse(active['started_at'] as String? ?? ''),
+      ),
+    ));
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _cancelActive(Map<String, Object?> active) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('لغو جلسه فعال؟'),
+        content: const Text('ست‌های ثبت‌شده این جلسه حذف می‌شوند.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('لغو جلسه')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await activeRepo.cancelActiveSession(active['id'] as int);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -74,6 +112,7 @@ class _DashboardState extends State<_Dashboard> {
       builder: (context, snapshot) {
         final data = snapshot.data;
         final todayPlan = data?.plans.isNotEmpty == true ? data!.plans.first : null;
+        final active = data?.active;
         return RefreshIndicator(
           onRefresh: () async => setState(() {}),
           child: ListView(
@@ -91,6 +130,30 @@ class _DashboardState extends State<_Dashboard> {
                 ),
               ]),
               const SizedBox(height: 22),
+              if (active != null) ...[
+                Card(
+                  color: colors.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Row(children: [
+                        Icon(Icons.play_circle_fill_rounded, color: colors.primary),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text('جلسه تمرین فعال', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
+                      ]),
+                      const SizedBox(height: 8),
+                      Text(active['plan_name'] as String? ?? 'تمرین'),
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Expanded(child: FilledButton.icon(onPressed: () => _resumeActive(active), icon: const Icon(Icons.play_arrow_rounded), label: const Text('ادامه تمرین'))),
+                        const SizedBox(width: 10),
+                        IconButton.outlined(onPressed: () => _cancelActive(active), icon: const Icon(Icons.close_rounded), tooltip: 'لغو جلسه'),
+                      ]),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(22),
@@ -143,10 +206,11 @@ class _DashboardState extends State<_Dashboard> {
 }
 
 class _DashboardData {
-  _DashboardData(this.summary, this.plans, this.recent);
+  _DashboardData(this.summary, this.plans, this.recent, this.active);
   final Map<String, Object?> summary;
   final List<Map<String, Object?>> plans;
   final List<Map<String, Object?>> recent;
+  final Map<String, Object?>? active;
 }
 
 class _MetricCard extends StatelessWidget {
@@ -202,6 +266,14 @@ class _SettingsPageState extends State<_SettingsPage> {
       children: [
         Text('بیشتر', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
         const SizedBox(height: 20),
+        Card(child: ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('یادآوری تمرین'),
+          subtitle: const Text('تنظیم اعلان هفتگی برای برنامه‌ها'),
+          trailing: const Icon(Icons.chevron_left_rounded),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkoutRemindersScreen())),
+        )),
+        const SizedBox(height: 14),
         Card(child: Column(children: [
           ListTile(leading: const Icon(Icons.save_alt_rounded), title: const Text('بکاپ محلی'), subtitle: const Text('ذخیره فایل اطلاعات روی گوشی'), onTap: busy ? null : () => run(() async { await local.exportBackup(); }, 'بکاپ محلی ساخته شد.')),
           const Divider(height: 1),
