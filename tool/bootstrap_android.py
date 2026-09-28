@@ -33,7 +33,6 @@ def patch_manifest() -> None:
     text = path.read_text(encoding="utf-8")
 
     permissions = [
-        '<uses-permission android:name="android.permission.INTERNET"/>',
         '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
         '<uses-permission android:name="android.permission.VIBRATE"/>',
         '<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>',
@@ -42,10 +41,14 @@ def patch_manifest() -> None:
         if permission not in text:
             text = text.replace(
                 '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    '
-                + permission,
+                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission,
                 1,
             )
+
+    text = text.replace(
+        '    <uses-permission android:name="android.permission.INTERNET"/>\n',
+        '',
+    )
 
     text = re.sub(
         r'android:label="[^"]*"',
