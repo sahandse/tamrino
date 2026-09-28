@@ -86,11 +86,12 @@ def patch_branding() -> None:
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#F7F7FA" android:pathData="M0,0h108v108h-108z"/>
-    <path android:fillColor="#7624F5" android:pathData="M10,43h8v24h-8z M18,36h10v38h-10z M80,36h10v38h-10z M90,43h8v24h-8z"/>
-    <path android:fillColor="#191A23" android:pathData="M8,52h92v7h-92z"/>
-    <path android:fillColor="#191A23" android:pathData="M34,34 C40,29 48,28 57,30 L82,30 C88,30 91,27 92,24 L92,39 C88,44 82,45 75,45 L58,45 C49,45 45,49 45,57 C45,66 50,70 58,70 C66,70 70,65 73,59 L84,59 C79,76 68,84 53,84 C35,84 28,73 28,58 C28,47 29,39 34,34z"/>
-    <path android:fillColor="#8A2CFF" android:pathData="M47,15 L53,21 L47,27 L41,21z M63,15 L69,21 L63,27 L57,21z"/>
+    <path android:fillColor="#0B0D0F" android:pathData="M0,0h108v108h-108z"/>
+    <path android:fillColor="#00C853" android:pathData="M14,54A40,40 0,0 1,36 18L41,26A31,31 0,0 0,22 54z M94,54A40,40 0,0 0,72 18L67,26A31,31 0,0 1,86 54z M26,78A38,38 0,0 0,82 78L74,73A29,29 0,0 1,34 73z"/>
+    <path android:fillColor="#F8FAFC" android:pathData="M54,20a8,8 0,1 0,0.01 0z M54,31C45,31 37,36 34,45L40,57C44,53 47,49 49,44L49,68H59L59,44C61,49 64,53 68,57L74,45C71,36 63,31 54,31z"/>
+    <path android:fillColor="#F8FAFC" android:pathData="M18,69h72v5h-72z"/>
+    <path android:fillColor="#7CFF4F" android:pathData="M10,62h6v20h-6z M17,58h7v28h-7z M84,58h7v28h-7z M92,62h6v20h-6z"/>
+    <path android:fillColor="#F8FAFC" android:pathData="M35,67a4,4 0,1 0,0.01 0z M73,67a4,4 0,1 0,0.01 0z"/>
 </vector>''',
         encoding="utf-8",
     )
@@ -99,7 +100,7 @@ def patch_branding() -> None:
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#F7F7FA" />
+            <solid android:color="#0B0D0F" />
         </shape>
     </item>
     <item android:width="148dp" android:height="148dp" android:gravity="center" android:drawable="@drawable/tamrino_launcher" />
@@ -113,15 +114,15 @@ def patch_branding() -> None:
         (values_dir / "styles.xml").write_text(
             '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowSplashScreenBackground">#F7F7FA</item>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">#0B0D0F</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/tamrino_launcher</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
-    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:colorAccent">#7624F5</item>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#00C853</item>
     </style>
 </resources>''',
             encoding="utf-8",
@@ -169,7 +170,7 @@ def main() -> None:
     patch_branding()
     patch_gradle()
     patch_main_activity()
-    print("Android bootstrap completed for ir.sahandse.tamrino with Tamrino branding")
+    print("Android bootstrap completed for ir.sahandse.tamrino with gym emblem branding")
 
 
 if __name__ == "__main__":
