@@ -29,29 +29,26 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
       builder: (context) => StatefulBuilder(
         builder: (context, modalSetState) => Directionality(
           textDirection: TextDirection.rtl,
           child: Padding(
-            padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+            padding: EdgeInsets.fromLTRB(18, 4, 18, MediaQuery.of(context).viewInsets.bottom + 18),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [
-                  const TamrinoLogo(size: 40),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(item == null ? 'افزودن حرکت' : 'ویرایش حرکت', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
-                ]),
-                const SizedBox(height: 16),
+                Text(item == null ? 'حرکت جدید' : 'ویرایش حرکت', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 18),
                 TextField(controller: name, decoration: const InputDecoration(labelText: 'نام حرکت *')),
-                const SizedBox(height: 12),
-                TextField(controller: muscle, decoration: const InputDecoration(labelText: 'عضله هدف')),
-                const SizedBox(height: 12),
-                TextField(controller: equipment, decoration: const InputDecoration(labelText: 'تجهیزات')),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: TextField(controller: muscle, decoration: const InputDecoration(labelText: 'عضله'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(controller: equipment, decoration: const InputDecoration(labelText: 'تجهیزات'))),
+                ]),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: exerciseMode,
-                  decoration: const InputDecoration(labelText: 'نوع ثبت حرکت'),
+                  decoration: const InputDecoration(labelText: 'نوع ثبت'),
                   items: const [
                     DropdownMenuItem(value: 'reps', child: Text('تکرار و وزنه')),
                     DropdownMenuItem(value: 'timed', child: Text('زمانی')),
@@ -60,22 +57,20 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                     if (value != null) modalSetState(() => exerciseMode = value);
                   },
                 ),
-                const SizedBox(height: 6),
-                SwitchListTile(
+                const SizedBox(height: 4),
+                SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('حرکت با وزن بدن'),
-                  subtitle: const Text('برای حرکت‌هایی مثل شنا یا بارفیکس'),
+                  title: const Text('وزن بدن'),
                   value: isBodyweight,
-                  onChanged: (value) => modalSetState(() => isBodyweight = value),
+                  onChanged: (v) => modalSetState(() => isBodyweight = v),
                 ),
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('تکرار برای هر سمت'),
-                  subtitle: const Text('برای حرکت‌های یک‌طرفه'),
                   value: perSide,
-                  onChanged: (value) => modalSetState(() => perSide = value),
+                  onChanged: (v) => modalSetState(() => perSide = v),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'یادداشت')),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -105,7 +100,7 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                     }
                     if (context.mounted) Navigator.pop(context, true);
                   },
-                  child: Text(item == null ? 'ذخیره حرکت' : 'ذخیره تغییرات'),
+                  child: const Text('ذخیره'),
                 ),
               ]),
             ),
@@ -135,21 +130,24 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
 
         return Scaffold(
           body: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(children: [
-                const TamrinoLogo(size: 48),
-                const SizedBox(width: 12),
-                Expanded(child: Text('حرکات', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900))),
-                IconButton.filledTonal(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded)),
+                const TamrinoLogo(size: 38),
+                const SizedBox(width: 10),
+                Expanded(child: Text('حرکات', style: Theme.of(context).textTheme.headlineSmall)),
+                IconButton.filled(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded)),
               ]),
-              const SizedBox(height: 14),
-              TextField(onChanged: (value) => setState(() => query = value), decoration: const InputDecoration(hintText: 'جستجوی حرکت', prefixIcon: Icon(Icons.search_rounded))),
+              const SizedBox(height: 18),
+              TextField(
+                onChanged: (value) => setState(() => query = value),
+                decoration: const InputDecoration(hintText: 'جستجو', prefixIcon: Icon(Icons.search_rounded)),
+              ),
               const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  FilterChip(label: const Text('علاقه‌مندی'), selected: favoritesOnly, onSelected: (v) => setState(() => favoritesOnly = v)),
+              SizedBox(
+                height: 42,
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  FilterChip(label: const Text('★ علاقه‌مندی'), selected: favoritesOnly, onSelected: (v) => setState(() => favoritesOnly = v)),
                   const SizedBox(width: 8),
                   PopupMenuButton<String>(
                     onSelected: (v) => setState(() => muscleFilter = v == '__all' ? null : v),
@@ -164,41 +162,46 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   ),
                 ]),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Expanded(
                 child: snapshot.connectionState == ConnectionState.waiting
                     ? const Center(child: CircularProgressIndicator())
                     : items.isEmpty
                         ? const _EmptyExercises()
                         : ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 24),
                             itemCount: items.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            separatorBuilder: (_, _) => const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final item = items[index];
-                              final muscle = item['muscle_group'] as String?;
-                              final eq = item['equipment'] as String?;
                               final tags = <String>[
-                                if (muscle?.isNotEmpty == true) muscle!,
-                                if (eq?.isNotEmpty == true) eq!,
+                                if ((item['muscle_group'] as String?)?.isNotEmpty == true) item['muscle_group'] as String,
+                                if ((item['equipment'] as String?)?.isNotEmpty == true) item['equipment'] as String,
                                 if (item['exercise_mode'] == 'timed') 'زمانی',
                                 if (item['is_bodyweight'] == 1) 'وزن بدن',
                                 if (item['per_side'] == 1) 'هر سمت',
                               ];
                               return Card(
                                 child: ListTile(
-                                  leading: CircleAvatar(child: item['is_favorite'] == 1 ? const Icon(Icons.star_rounded) : const TamrinoLogo(size: 25)),
-                                  title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                  subtitle: Text(tags.join(' • ')),
-                                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                                    IconButton(
-                                      icon: Icon(item['is_favorite'] == 1 ? Icons.star_rounded : Icons.star_border_rounded),
-                                      onPressed: () async {
-                                        await repo.toggleExerciseFavorite(item['id'] as int, item['is_favorite'] != 1);
-                                        if (mounted) setState(() {});
-                                      },
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                  leading: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.primary.withValues(alpha: .08),
+                                      borderRadius: BorderRadius.circular(13),
                                     ),
-                                    const Icon(Icons.edit_outlined),
-                                  ]),
+                                    child: Icon(Icons.fitness_center_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                                  ),
+                                  title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  subtitle: tags.isEmpty ? null : Text(tags.join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  trailing: IconButton(
+                                    icon: Icon(item['is_favorite'] == 1 ? Icons.star_rounded : Icons.star_border_rounded),
+                                    onPressed: () async {
+                                      await repo.toggleExerciseFavorite(item['id'] as int, item['is_favorite'] != 1);
+                                      if (mounted) setState(() {});
+                                    },
+                                  ),
                                   onTap: () => _openExerciseEditor(item),
                                 ),
                               );
@@ -207,7 +210,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
               ),
             ]),
           ),
-          floatingActionButton: FloatingActionButton.extended(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded), label: const Text('حرکت جدید')),
         );
       },
     );
@@ -220,11 +222,11 @@ class _EmptyExercises extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const TamrinoLogo(size: 82),
-          const SizedBox(height: 18),
-          Text('حرکتی پیدا نشد', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          const Text('حرکت واقعی خودت را اضافه کن یا فیلترها را تغییر بده.', textAlign: TextAlign.center),
+          const TamrinoLogo(size: 58),
+          const SizedBox(height: 16),
+          Text('حرکتی پیدا نشد', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text('حرکت جدید اضافه کن یا فیلترها را تغییر بده.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]),
       );
 }
