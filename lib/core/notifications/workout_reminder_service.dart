@@ -15,17 +15,20 @@ class WorkoutReminderService {
     if (_ready) return;
     tzdata.initializeTimeZones();
     try {
-      final local = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(local.name));
+      final localName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(localName));
     } catch (_) {
-      // timezone package will fall back to its default location.
+      // در صورت خطا، timezone با مقدار پیش‌فرض خود ادامه می‌دهد.
     }
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings();
-    await _plugin.initialize(const InitializationSettings(android: android, iOS: ios));
+    await _plugin.initialize(
+      const InitializationSettings(android: android, iOS: ios),
+    );
 
-    final androidImpl = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.requestNotificationsPermission();
     _ready = true;
   }
@@ -84,7 +87,8 @@ class WorkoutReminderService {
 
   tz.TZDateTime _nextWeekdayTime(int weekday, int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
-    var candidate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    var candidate =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
     var days = (weekday - candidate.weekday) % 7;
     if (days == 0 && !candidate.isAfter(now)) days = 7;
     candidate = candidate.add(Duration(days: days));
@@ -93,7 +97,12 @@ class WorkoutReminderService {
 }
 
 class WorkoutReminderPreference {
-  const WorkoutReminderPreference({required this.enabled, required this.hour, required this.minute});
+  const WorkoutReminderPreference({
+    required this.enabled,
+    required this.hour,
+    required this.minute,
+  });
+
   final bool enabled;
   final int hour;
   final int minute;
