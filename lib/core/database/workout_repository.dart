@@ -15,6 +15,9 @@ class WorkoutRepository {
     String? muscleGroup,
     String? equipment,
     String? notes,
+    String exerciseMode = 'reps',
+    bool isBodyweight = false,
+    bool perSide = false,
   }) async {
     final db = await _db;
     return db.insert('exercises', {
@@ -22,8 +25,38 @@ class WorkoutRepository {
       'muscle_group': _emptyToNull(muscleGroup),
       'equipment': _emptyToNull(equipment),
       'notes': _emptyToNull(notes),
+      'exercise_mode': _validExerciseMode(exerciseMode),
+      'is_bodyweight': isBodyweight ? 1 : 0,
+      'per_side': perSide ? 1 : 0,
       'created_at': DateTime.now().toIso8601String(),
     });
+  }
+
+  Future<void> updateExercise({
+    required int exerciseId,
+    required String name,
+    String? muscleGroup,
+    String? equipment,
+    String? notes,
+    String exerciseMode = 'reps',
+    bool isBodyweight = false,
+    bool perSide = false,
+  }) async {
+    final db = await _db;
+    await db.update(
+      'exercises',
+      {
+        'name': name.trim(),
+        'muscle_group': _emptyToNull(muscleGroup),
+        'equipment': _emptyToNull(equipment),
+        'notes': _emptyToNull(notes),
+        'exercise_mode': _validExerciseMode(exerciseMode),
+        'is_bodyweight': isBodyweight ? 1 : 0,
+        'per_side': perSide ? 1 : 0,
+      },
+      where: 'id = ?',
+      whereArgs: [exerciseId],
+    );
   }
 
   Future<void> toggleExerciseFavorite(int exerciseId, bool favorite) async {
@@ -158,7 +191,8 @@ class WorkoutRepository {
   Future<List<Map<String, Object?>>> getPlanExercises(int planId) async {
     final db = await _db;
     return db.rawQuery('''
-      SELECT pe.*, e.name, e.muscle_group, e.equipment, e.notes, e.is_favorite
+      SELECT pe.*, e.name, e.muscle_group, e.equipment, e.notes, e.is_favorite,
+        e.exercise_mode, e.is_bodyweight, e.per_side
       FROM plan_exercises pe JOIN exercises e ON e.id = pe.exercise_id
       WHERE pe.plan_id = ? ORDER BY pe.position ASC
     ''', [planId]);
@@ -180,6 +214,7 @@ class WorkoutRepository {
     required int setNumber,
     int? reps,
     double? weight,
+    int? durationSeconds,
     double? rpe,
     String setType = 'normal',
     String? supersetGroup,
@@ -191,6 +226,7 @@ class WorkoutRepository {
       'set_number': setNumber,
       'reps': reps,
       'weight': weight,
+      'duration_seconds': durationSeconds,
       'rpe': rpe,
       'completed': 1,
       'set_type': _validSetType(setType),
@@ -227,11 +263,20 @@ class WorkoutRepository {
     );
   }
 
-  Future<void> updateSet({required int setId, int? reps, double? weight, double? rpe, String? setType, String? supersetGroup}) async {
+  Future<void> updateSet({
+    required int setId,
+    int? reps,
+    double? weight,
+    int? durationSeconds,
+    double? rpe,
+    String? setType,
+    String? supersetGroup,
+  }) async {
     final db = await _db;
     await db.update('workout_sets', {
       'reps': reps,
       'weight': weight,
+      'duration_seconds': durationSeconds,
       'rpe': rpe,
       if (setType != null) 'set_type': _validSetType(setType),
       'superset_group': _emptyToNull(supersetGroup),
@@ -246,7 +291,7 @@ class WorkoutRepository {
   Future<List<Map<String, Object?>>> getSessionSets(int sessionId) async {
     final db = await _db;
     return db.rawQuery('''
-      SELECT ws.*, e.name AS exercise_name
+      SELECT ws.*, e.name AS exercise_name, e.exercise_mode, e.is_bodyweight, e.per_side
       FROM workout_sets ws JOIN exercises e ON e.id = ws.exercise_id
       WHERE ws.session_id = ? ORDER BY ws.exercise_id ASC, ws.set_number ASC
     ''', [sessionId]);
@@ -331,6 +376,7 @@ class WorkoutRepository {
       FROM workout_sets ws JOIN exercises e ON e.id = ws.exercise_id
       JOIN workout_sessions session ON session.id = ws.session_id
       WHERE session.finished_at IS NOT NULL AND ws.set_type != 'warmup'
+        AND e.exercise_mode = 'reps'
       GROUP BY e.id, e.name HAVING MAX(COALESCE(ws.weight, 0)) > 0
       ORDER BY estimated_1rm DESC LIMIT ?
     ''', [limit]);
@@ -352,6 +398,11 @@ class WorkoutRepository {
   String _validSetType(String value) {
     const allowed = {'normal', 'warmup', 'drop', 'failure', 'rest_pause'};
     return allowed.contains(value) ? value : 'normal';
+  }
+
+  String _validExerciseMode(String value) {
+    const allowed = {'reps', 'timed'};
+    return allowed.contains(value) ? value : 'reps';
   }
 
   String? _emptyToNull(String? value) {
