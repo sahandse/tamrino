@@ -57,6 +57,33 @@ class WorkoutRepository {
     });
   }
 
+  Future<int> duplicatePlan(int planId) async {
+    final db = await _db;
+    return db.transaction((txn) async {
+      final plans = await txn.query('workout_plans', where: 'id = ?', whereArgs: [planId], limit: 1);
+      if (plans.isEmpty) throw StateError('برنامه پیدا نشد.');
+      final source = plans.first;
+      final newPlanId = await txn.insert('workout_plans', {
+        'name': '${source['name']} - کپی',
+        'notes': source['notes'],
+        'weekday': source['weekday'],
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      final items = await txn.query('plan_exercises', where: 'plan_id = ?', whereArgs: [planId], orderBy: 'position ASC');
+      for (final item in items) {
+        await txn.insert('plan_exercises', {
+          'plan_id': newPlanId,
+          'exercise_id': item['exercise_id'],
+          'position': item['position'],
+          'target_sets': item['target_sets'],
+          'target_reps': item['target_reps'],
+          'rest_seconds': item['rest_seconds'],
+        });
+      }
+      return newPlanId;
+    });
+  }
+
   Future<void> setPlanWeekday(int planId, int? weekday) async {
     final db = await _db;
     await db.update('workout_plans', {'weekday': weekday}, where: 'id = ?', whereArgs: [planId]);
@@ -90,9 +117,42 @@ class WorkoutRepository {
     });
   }
 
-  Future<void> updateExerciseRestSeconds({required int planExerciseId, required int restSeconds}) async {
+  Future<void> updatePlanExercise({
+    required int planExerciseId,
+    int? targetSets,
+    String? targetReps,
+    int? restSeconds,
+  }) async {
     final db = await _db;
-    await db.update('plan_exercises', {'rest_seconds': restSeconds.clamp(0, 900)}, where: 'id = ?', whereArgs: [planExerciseId]);
+    await db.update(
+      'plan_exercises',
+      {
+        'target_sets': targetSets,
+        'target_reps': _emptyToNull(targetReps),
+        if (restSeconds != null) 'rest_seconds': restSeconds.clamp(0, 900),
+      },
+      where: 'id = ?',
+      whereArgs: [planExerciseId],
+    );
+  }
+
+  Future<void> reorderPlanExercises(int planId, List<int> planExerciseIds) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (var i = 0; i < planExerciseIds.length; i++) {
+        await txn.update(
+          'plan_exercises',
+          {'position': i},
+          where: 'id = ? AND plan_id = ?',
+          whereArgs: [planExerciseIds[i], planId],
+        );
+      }
+    });
+  }
+
+  Future<void> removePlanExercise(int planExerciseId) async {
+    final db = await _db;
+    await db.delete('plan_exercises', where: 'id = ?', whereArgs: [planExerciseId]);
   }
 
   Future<List<Map<String, Object?>>> getPlanExercises(int planId) async {
@@ -107,6 +167,11 @@ class WorkoutRepository {
   Future<int> startSession(int planId) async {
     final db = await _db;
     return db.insert('workout_sessions', {'plan_id': planId, 'started_at': DateTime.now().toIso8601String()});
+  }
+
+  Future<void> updateSessionNotes(int sessionId, String? notes) async {
+    final db = await _db;
+    await db.update('workout_sessions', {'notes': _emptyToNull(notes)}, where: 'id = ?', whereArgs: [sessionId]);
   }
 
   Future<int> addSet({
@@ -145,10 +210,29 @@ class WorkoutRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
+  Future<List<Map<String, Object?>>> getLastExerciseSets(int exerciseId) async {
+    final db = await _db;
+    final sessionRows = await db.rawQuery('''
+      SELECT s.id FROM workout_sessions s
+      JOIN workout_sets ws ON ws.session_id = s.id
+      WHERE ws.exercise_id = ? AND s.finished_at IS NOT NULL
+      ORDER BY s.finished_at DESC LIMIT 1
+    ''', [exerciseId]);
+    if (sessionRows.isEmpty) return const [];
+    return db.query(
+      'workout_sets',
+      where: 'session_id = ? AND exercise_id = ?',
+      whereArgs: [sessionRows.first['id'], exerciseId],
+      orderBy: 'set_number ASC',
+    );
+  }
+
   Future<void> updateSet({required int setId, int? reps, double? weight, double? rpe, String? setType, String? supersetGroup}) async {
     final db = await _db;
     await db.update('workout_sets', {
-      'reps': reps, 'weight': weight, 'rpe': rpe,
+      'reps': reps,
+      'weight': weight,
+      'rpe': rpe,
       if (setType != null) 'set_type': _validSetType(setType),
       'superset_group': _emptyToNull(supersetGroup),
     }, where: 'id = ?', whereArgs: [setId]);
