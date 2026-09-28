@@ -45,11 +45,7 @@ def patch_manifest() -> None:
                 1,
             )
 
-    text = text.replace(
-        '    <uses-permission android:name="android.permission.INTERNET"/>\n',
-        '',
-    )
-
+    text = text.replace('    <uses-permission android:name="android.permission.INTERNET"/>\n', '')
     text = re.sub(r'android:label="[^"]*"', 'android:label="تمرینو"', text, count=1)
     text = re.sub(r'android:icon="[^"]*"', 'android:icon="@drawable/tamrino_launcher"', text, count=1)
     if 'android:roundIcon=' not in text:
@@ -85,7 +81,6 @@ def patch_branding() -> None:
     drawable = res / "drawable"
     drawable.mkdir(parents=True, exist_ok=True)
 
-    # Vector interpretation of the approved Tamrino dumbbell + Persian ت mark.
     (drawable / "tamrino_launcher.xml").write_text(
         '''<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -102,7 +97,11 @@ def patch_branding() -> None:
 
     launch = '''<?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="#F7F7FA" />
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#F7F7FA" />
+        </shape>
+    </item>
     <item android:width="148dp" android:height="148dp" android:gravity="center" android:drawable="@drawable/tamrino_launcher" />
 </layer-list>'''
     for folder in (res / "drawable", res / "drawable-v21"):
@@ -111,8 +110,7 @@ def patch_branding() -> None:
 
     for values_dir in (res / "values-v31", res / "values-night-v31"):
         values_dir.mkdir(parents=True, exist_ok=True)
-        style_path = values_dir / "styles.xml"
-        style_path.write_text(
+        (values_dir / "styles.xml").write_text(
             '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
@@ -135,19 +133,13 @@ def patch_gradle() -> None:
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8")
-
     text = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "ir.sahandse.tamrino"', text, count=1)
 
     if "isCoreLibraryDesugaringEnabled" not in text:
         text = text.replace("compileOptions {", "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
 
     if "coreLibraryDesugaring(" not in text:
-        dependency = (
-            'dependencies {\n'
-            '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n'
-            '}\n'
-        )
-        text = text.rstrip() + "\n\n" + dependency
+        text = text.rstrip() + '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 
     path.write_text(text, encoding="utf-8")
 
