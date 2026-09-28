@@ -8,122 +8,118 @@ class TamrinoLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mark = SizedBox.square(
+    return SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _TamrinoMarkPainter()),
-    );
-
-    if (!showWordmark) return mark;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        mark,
-        const SizedBox(width: 10),
-        Text(
-          'تمرینو',
-          style: TextStyle(
-            fontSize: size * .48,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -.5,
-          ),
-        ),
-      ],
+      child: CustomPaint(painter: const _GymEmblemPainter()),
     );
   }
 }
 
-class _TamrinoMarkPainter extends CustomPainter {
+class _GymEmblemPainter extends CustomPainter {
+  const _GymEmblemPainter();
+
   @override
   void paint(Canvas canvas, Size size) {
-    final purple = Paint()
+    final rect = Offset.zero & size;
+    final center = rect.center;
+    final scale = size.shortestSide;
+
+    final background = Paint()..color = const Color(0xFF0B0D0F);
+    final green = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0xFF9A36FF), Color(0xFF6518F5)],
+        colors: [Color(0xFF7CFF4F), Color(0xFF00C853)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-      ).createShader(Offset.zero & size);
-    final dark = Paint()..color = const Color(0xFF171821);
+      ).createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = scale * .075
+      ..strokeCap = StrokeCap.round;
+    final white = Paint()..color = const Color(0xFFF8FAFC);
+    final dark = Paint()..color = const Color(0xFF0B0D0F);
 
-    final centerY = size.height * .54;
-    final plateW = size.width * .13;
-    final plateH = size.height * .42;
-    final smallPlateH = size.height * .30;
+    canvas.drawCircle(center, scale * .48, background);
 
-    RRect rr(double l, double t, double r, double b, double radius) =>
-        RRect.fromRectAndRadius(Rect.fromLTRB(l, t, r, b), Radius.circular(radius));
+    final ringRect = Rect.fromCircle(center: center, radius: scale * .39);
+    canvas.drawArc(ringRect, -2.78, 2.25, false, green);
+    canvas.drawArc(ringRect, .53, 2.08, false, green);
 
-    // Dumbbell bar.
+    // Head.
+    canvas.drawCircle(
+      Offset(center.dx, size.height * .27),
+      scale * .075,
+      white,
+    );
+
+    // Athletic torso silhouette.
+    final torso = Path()
+      ..moveTo(size.width * .50, size.height * .34)
+      ..cubicTo(size.width * .42, size.height * .33, size.width * .34, size.height * .39, size.width * .31, size.height * .49)
+      ..lineTo(size.width * .37, size.height * .61)
+      ..cubicTo(size.width * .41, size.height * .57, size.width * .44, size.height * .53, size.width * .46, size.height * .47)
+      ..lineTo(size.width * .46, size.height * .69)
+      ..lineTo(size.width * .54, size.height * .69)
+      ..lineTo(size.width * .54, size.height * .47)
+      ..cubicTo(size.width * .56, size.height * .53, size.width * .59, size.height * .57, size.width * .63, size.height * .61)
+      ..lineTo(size.width * .69, size.height * .49)
+      ..cubicTo(size.width * .66, size.height * .39, size.width * .58, size.height * .33, size.width * .50, size.height * .34)
+      ..close();
+    canvas.drawPath(torso, white);
+
+    // Chest/ab negative-space lines.
     canvas.drawRRect(
-      rr(size.width * .10, centerY - size.height * .035,
-          size.width * .90, centerY + size.height * .035, size.width * .04),
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(center.dx, size.height * .43),
+          width: scale * .035,
+          height: scale * .18,
+        ),
+        Radius.circular(scale * .02),
+      ),
       dark,
     );
 
-    // Plates.
+    // Barbell bar.
     canvas.drawRRect(
-      rr(size.width * .08, centerY - smallPlateH / 2,
-          size.width * .08 + plateW * .72, centerY + smallPlateH / 2, size.width * .05),
-      purple,
-    );
-    canvas.drawRRect(
-      rr(size.width * .14, centerY - plateH / 2,
-          size.width * .14 + plateW, centerY + plateH / 2, size.width * .055),
-      purple,
-    );
-    canvas.drawRRect(
-      rr(size.width * .86 - plateW, centerY - plateH / 2,
-          size.width * .86, centerY + plateH / 2, size.width * .055),
-      purple,
-    );
-    canvas.drawRRect(
-      rr(size.width * .92 - plateW * .72, centerY - smallPlateH / 2,
-          size.width * .92, centerY + smallPlateH / 2, size.width * .05),
-      purple,
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(
+          size.width * .17,
+          size.height * .69,
+          size.width * .83,
+          size.height * .735,
+        ),
+        Radius.circular(scale * .025),
+      ),
+      white,
     );
 
-    // Stylised Persian ت body.
-    final path = Path()
-      ..moveTo(size.width * .33, size.height * .34)
-      ..quadraticBezierTo(size.width * .41, size.height * .27, size.width * .52, size.height * .30)
-      ..lineTo(size.width * .76, size.height * .30)
-      ..quadraticBezierTo(size.width * .84, size.height * .30, size.width * .86, size.height * .24)
-      ..lineTo(size.width * .86, size.height * .38)
-      ..quadraticBezierTo(size.width * .83, size.height * .44, size.width * .74, size.height * .44)
-      ..lineTo(size.width * .56, size.height * .44)
-      ..quadraticBezierTo(size.width * .45, size.height * .45, size.width * .43, size.height * .57)
-      ..quadraticBezierTo(size.width * .42, size.height * .68, size.width * .53, size.height * .70)
-      ..quadraticBezierTo(size.width * .63, size.height * .71, size.width * .68, size.height * .61)
-      ..lineTo(size.width * .76, size.height * .61)
-      ..quadraticBezierTo(size.width * .68, size.height * .82, size.width * .49, size.height * .82)
-      ..quadraticBezierTo(size.width * .28, size.height * .82, size.width * .28, size.height * .59)
-      ..quadraticBezierTo(size.width * .28, size.height * .43, size.width * .33, size.height * .34)
-      ..close();
-    canvas.drawPath(path, dark);
+    void plate(double left, double right, double top, double bottom) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            size.width * left,
+            size.height * top,
+            size.width * right,
+            size.height * bottom,
+          ),
+          Radius.circular(scale * .025),
+        ),
+        Paint()
+          ..shader = const LinearGradient(
+            colors: [Color(0xFF7CFF4F), Color(0xFF00C853)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(rect),
+      );
+    }
 
-    // Two dots of ت.
-    final d = size.width * .11;
-    final dot1 = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(size.width * .48, size.height * .17), width: d, height: d),
-        Radius.circular(d * .22),
-      ));
-    final dot2 = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(size.width * .63, size.height * .17), width: d, height: d),
-        Radius.circular(d * .22),
-      ));
-    canvas.save();
-    canvas.translate(size.width * .48, size.height * .17);
-    canvas.rotate(.78);
-    canvas.translate(-size.width * .48, -size.height * .17);
-    canvas.drawPath(dot1, purple);
-    canvas.restore();
-    canvas.save();
-    canvas.translate(size.width * .63, size.height * .17);
-    canvas.rotate(.78);
-    canvas.translate(-size.width * .63, -size.height * .17);
-    canvas.drawPath(dot2, purple);
-    canvas.restore();
+    plate(.09, .14, .61, .82);
+    plate(.145, .20, .57, .86);
+    plate(.80, .855, .57, .86);
+    plate(.86, .91, .61, .82);
+
+    // Hands gripping the bar.
+    canvas.drawCircle(Offset(size.width * .36, size.height * .71), scale * .04, white);
+    canvas.drawCircle(Offset(size.width * .64, size.height * .71), scale * .04, white);
   }
 
   @override
