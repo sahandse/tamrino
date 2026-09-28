@@ -15,7 +15,7 @@ class AppDatabase {
 
     _database = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async => _createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -28,6 +28,10 @@ class AppDatabase {
           await db.execute('ALTER TABLE body_metrics ADD COLUMN waist REAL');
           await db.execute('ALTER TABLE body_metrics ADD COLUMN arm REAL');
           await db.execute('ALTER TABLE body_metrics ADD COLUMN thigh REAL');
+        }
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE exercises ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+          await db.execute('ALTER TABLE workout_plans ADD COLUMN weekday INTEGER');
         }
       },
     );
@@ -42,6 +46,7 @@ class AppDatabase {
         muscle_group TEXT,
         equipment TEXT,
         notes TEXT,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       )
     ''');
@@ -50,6 +55,7 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         notes TEXT,
+        weekday INTEGER,
         created_at TEXT NOT NULL
       )
     ''');
