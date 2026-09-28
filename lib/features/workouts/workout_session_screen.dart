@@ -24,6 +24,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   bool finishing = false;
   int restSeconds = 0;
   List<Map<String, Object?>> sets = [];
+  final Map<int, List<Map<String, Object?>>> previousSets = {};
 
   @override
   void initState() {
@@ -33,6 +34,10 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
   Future<void> _start() async {
     final id = await repo.startSession(widget.plan['id'] as int);
+    for (final exercise in widget.exercises) {
+      final exerciseId = exercise['exercise_id'] as int;
+      previousSets[exerciseId] = await repo.getLastExerciseSets(exerciseId);
+    }
     stopwatch.start();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -97,6 +102,35 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     setState(() => restSeconds = 0);
   }
 
+  Future<void> _editSessionNotes() async {
+    if (sessionId == null) return;
+    final controller = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('یادداشت تمرین', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 14),
+            TextField(controller: controller, minLines: 3, maxLines: 6, decoration: const InputDecoration(hintText: 'مثلاً انرژی امروز، درد، نکته یا هدف جلسه...')),
+            const SizedBox(height: 14),
+            FilledButton(
+              onPressed: () async {
+                await repo.updateSessionNotes(sessionId!, controller.text);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('ذخیره یادداشت'),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _addSet(Map<String, Object?> exercise) async {
     if (sessionId == null) return;
 
@@ -107,6 +141,15 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     final exerciseId = exercise['exercise_id'] as int;
     final nextSet = _completedFor(exerciseId) + 1;
     var setType = 'normal';
+
+    final previous = previousSets[exerciseId] ?? const [];
+    Map<String, Object?>? suggestion;
+    if (previous.isNotEmpty) {
+      suggestion = previous[(nextSet - 1).clamp(0, previous.length - 1)];
+      if (suggestion['reps'] != null) reps.text = '${suggestion['reps']}';
+      if (suggestion['weight'] != null) weight.text = '${suggestion['weight']}';
+      if (suggestion['rpe'] != null) rpe.text = '${suggestion['rpe']}';
+    }
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -125,6 +168,21 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                   Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
                   Text('ست $nextSet'),
+                  if (suggestion != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.history_rounded),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('جلسه قبل: ${suggestion['reps'] ?? '—'} تکرار × ${suggestion['weight'] ?? '—'} kg')),
+                      ]),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: setType,
@@ -200,59 +258,55 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
           textDirection: TextDirection.rtl,
           child: Padding(
             padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: setType,
-                  decoration: const InputDecoration(labelText: 'نوع ست'),
-                  items: const [
-                    DropdownMenuItem(value: 'normal', child: Text('معمولی')),
-                    DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
-                    DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
-                    DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
-                    DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) modalSetState(() => setType = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
-                ]),
-                const SizedBox(height: 12),
-                TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE')),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () async {
-                    await repo.updateSet(
-                      setId: set['id'] as int,
-                      reps: int.tryParse(reps.text.trim()),
-                      weight: double.tryParse(weight.text.trim()),
-                      rpe: double.tryParse(rpe.text.trim()),
-                      setType: setType,
-                      supersetGroup: set['superset_group'] as String?,
-                    );
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: const Text('ذخیره تغییرات'),
-                ),
-                TextButton.icon(
-                  onPressed: () async {
-                    await repo.deleteSet(set['id'] as int);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('حذف ست'),
-                ),
-              ],
-            ),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: setType,
+                decoration: const InputDecoration(labelText: 'نوع ست'),
+                items: const [
+                  DropdownMenuItem(value: 'normal', child: Text('معمولی')),
+                  DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
+                  DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
+                  DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
+                  DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
+                ],
+                onChanged: (value) {
+                  if (value != null) modalSetState(() => setType = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
+              ]),
+              const SizedBox(height: 12),
+              TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE')),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () async {
+                  await repo.updateSet(
+                    setId: set['id'] as int,
+                    reps: int.tryParse(reps.text.trim()),
+                    weight: double.tryParse(weight.text.trim()),
+                    rpe: double.tryParse(rpe.text.trim()),
+                    setType: setType,
+                    supersetGroup: set['superset_group'] as String?,
+                  );
+                  if (context.mounted) Navigator.pop(context);
+                },
+                child: const Text('ذخیره تغییرات'),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  await repo.deleteSet(set['id'] as int);
+                  if (context.mounted) Navigator.pop(context);
+                },
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('حذف ست'),
+              ),
+            ]),
           ),
         ),
       ),
@@ -288,7 +342,10 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.plan['name'] as String),
-          actions: [Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800))))],
+          actions: [
+            IconButton(onPressed: _editSessionNotes, icon: const Icon(Icons.sticky_note_2_outlined), tooltip: 'یادداشت جلسه'),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800)))),
+          ],
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
@@ -319,6 +376,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                         final exercise = widget.exercises[index];
                         final exerciseId = exercise['exercise_id'] as int;
                         final exerciseSets = sets.where((s) => s['exercise_id'] == exerciseId).toList();
+                        final previous = previousSets[exerciseId] ?? const [];
                         final targetSets = exercise['target_sets'] as int?;
                         final rest = (exercise['rest_seconds'] as num?)?.toInt() ?? 90;
                         return Card(
@@ -335,6 +393,18 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                                 ])),
                                 Text('${exerciseSets.length}/${targetSets ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w900)),
                               ]),
+                              if (previous.isNotEmpty && exerciseSets.isEmpty) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16)),
+                                  child: Row(children: [
+                                    const Icon(Icons.history_rounded, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text('جلسه قبل: ${previous.map((e) => '${e['weight'] ?? '—'}×${e['reps'] ?? '—'}').join('  •  ')}', maxLines: 2, overflow: TextOverflow.ellipsis)),
+                                  ]),
+                                ),
+                              ],
                               if (exerciseSets.isNotEmpty) ...[
                                 const SizedBox(height: 14),
                                 ...exerciseSets.map((set) => ListTile(
