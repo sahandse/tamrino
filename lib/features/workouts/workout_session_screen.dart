@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/database/workout_repository.dart';
 
 class WorkoutSessionScreen extends StatefulWidget {
-  const WorkoutSessionScreen({
-    super.key,
-    required this.plan,
-    required this.exercises,
-  });
+  const WorkoutSessionScreen({super.key, required this.plan, required this.exercises});
 
   final Map<String, Object?> plan;
   final List<Map<String, Object?>> exercises;
@@ -27,7 +23,6 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   bool loading = true;
   bool finishing = false;
   int restSeconds = 0;
-  int defaultRestSeconds = 90;
   List<Map<String, Object?>> sets = [];
 
   @override
@@ -76,20 +71,21 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     if (mounted) setState(() => sets = data);
   }
 
-  int _completedFor(int exerciseId) =>
-      sets.where((s) => s['exercise_id'] == exerciseId).length;
+  int _completedFor(int exerciseId) => sets.where((s) => s['exercise_id'] == exerciseId).length;
 
-  void _startRestTimer() {
+  void _startRestTimer(int seconds) {
     restTimer?.cancel();
-    setState(() => restSeconds = defaultRestSeconds);
+    if (seconds <= 0) {
+      setState(() => restSeconds = 0);
+      return;
+    }
+    setState(() => restSeconds = seconds);
     restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       if (restSeconds <= 1) {
         t.cancel();
         setState(() => restSeconds = 0);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('زمان استراحت تمام شد؛ آماده ست بعدی هستی.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('زمان استراحت تمام شد.')));
       } else {
         setState(() => restSeconds--);
       }
@@ -107,79 +103,77 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     final reps = TextEditingController();
     final weight = TextEditingController();
     final rpe = TextEditingController();
+    final superset = TextEditingController();
     final exerciseId = exercise['exercise_id'] as int;
     final nextSet = _completedFor(exerciseId) + 1;
+    var setType = 'normal';
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                exercise['name'] as String,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              Text('ست $nextSet'),
-              const SizedBox(height: 16),
-              Row(
+      builder: (context) => StatefulBuilder(
+        builder: (context, modalSetState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: reps,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'تکرار'),
-                    ),
+                  Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text('ست $nextSet'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: setType,
+                    decoration: const InputDecoration(labelText: 'نوع ست'),
+                    items: const [
+                      DropdownMenuItem(value: 'normal', child: Text('معمولی')),
+                      DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
+                      DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
+                      DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
+                      DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) modalSetState(() => setType = value);
+                    },
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: weight,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'وزنه (kg)'),
-                    ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
+                  ]),
+                  const SizedBox(height: 12),
+                  TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE (اختیاری)')),
+                  const SizedBox(height: 12),
+                  TextField(controller: superset, decoration: const InputDecoration(labelText: 'گروه سوپرست (اختیاری)', hintText: 'مثلاً A')),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final repValue = int.tryParse(reps.text.trim());
+                      final weightValue = double.tryParse(weight.text.trim());
+                      if (repValue == null && weightValue == null) return;
+                      await repo.addSet(
+                        sessionId: sessionId!,
+                        exerciseId: exerciseId,
+                        setNumber: nextSet,
+                        reps: repValue,
+                        weight: weightValue,
+                        rpe: double.tryParse(rpe.text.trim()),
+                        setType: setType,
+                        supersetGroup: superset.text,
+                      );
+                      if (context.mounted) Navigator.pop(context, true);
+                    },
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('ثبت ست'),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: rpe,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'RPE (اختیاری)'),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () async {
-                  final repValue = int.tryParse(reps.text.trim());
-                  final weightValue = double.tryParse(weight.text.trim());
-                  final rpeValue = double.tryParse(rpe.text.trim());
-                  if (repValue == null && weightValue == null) return;
-
-                  await repo.addSet(
-                    sessionId: sessionId!,
-                    exerciseId: exerciseId,
-                    setNumber: nextSet,
-                    reps: repValue,
-                    weight: weightValue,
-                    rpe: rpeValue,
-                  );
-                  if (context.mounted) Navigator.pop(context, true);
-                },
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('ثبت ست'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -187,7 +181,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
     if (saved == true) {
       await _reloadSets();
-      _startRestTimer();
+      _startRestTimer((exercise['rest_seconds'] as num?)?.toInt() ?? 90);
     }
   }
 
@@ -195,54 +189,70 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     final reps = TextEditingController(text: '${set['reps'] ?? ''}');
     final weight = TextEditingController(text: '${set['weight'] ?? ''}');
     final rpe = TextEditingController(text: '${set['rpe'] ?? ''}');
+    var setType = set['set_type'] as String? ?? 'normal';
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 16),
-              Row(children: [
-                Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
-              ]),
-              const SizedBox(height: 12),
-              TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE')),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () async {
-                  await repo.updateSet(
-                    setId: set['id'] as int,
-                    reps: int.tryParse(reps.text.trim()),
-                    weight: double.tryParse(weight.text.trim()),
-                    rpe: double.tryParse(rpe.text.trim()),
-                  );
-                  if (context.mounted) Navigator.pop(context);
-                },
-                child: const Text('ذخیره تغییرات'),
-              ),
-              TextButton.icon(
-                onPressed: () async {
-                  await repo.deleteSet(set['id'] as int);
-                  if (context.mounted) Navigator.pop(context);
-                },
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('حذف ست'),
-              ),
-            ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, modalSetState) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: setType,
+                  decoration: const InputDecoration(labelText: 'نوع ست'),
+                  items: const [
+                    DropdownMenuItem(value: 'normal', child: Text('معمولی')),
+                    DropdownMenuItem(value: 'warmup', child: Text('گرم‌کردن')),
+                    DropdownMenuItem(value: 'drop', child: Text('دراپ‌ست')),
+                    DropdownMenuItem(value: 'failure', child: Text('تا ناتوانی')),
+                    DropdownMenuItem(value: 'rest_pause', child: Text('Rest-Pause')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) modalSetState(() => setType = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: reps, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تکرار'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'وزنه (kg)'))),
+                ]),
+                const SizedBox(height: 12),
+                TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE')),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () async {
+                    await repo.updateSet(
+                      setId: set['id'] as int,
+                      reps: int.tryParse(reps.text.trim()),
+                      weight: double.tryParse(weight.text.trim()),
+                      rpe: double.tryParse(rpe.text.trim()),
+                      setType: setType,
+                      supersetGroup: set['superset_group'] as String?,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: const Text('ذخیره تغییرات'),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    await repo.deleteSet(set['id'] as int);
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('حذف ست'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -261,6 +271,16 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     Navigator.pop(context, true);
   }
 
+  String _setTypeLabel(String? type) {
+    switch (type) {
+      case 'warmup': return 'گرم‌کردن';
+      case 'drop': return 'دراپ‌ست';
+      case 'failure': return 'تا ناتوانی';
+      case 'rest_pause': return 'Rest-Pause';
+      default: return 'معمولی';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -268,12 +288,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.plan['name'] as String),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800))),
-            ),
-          ],
+          actions: [Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Center(child: Text(elapsed, style: const TextStyle(fontWeight: FontWeight.w800))))],
         ),
         body: loading
             ? const Center(child: CircularProgressIndicator())
@@ -283,27 +298,17 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                     Container(
                       margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.timer_outlined),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('استراحت', style: TextStyle(fontWeight: FontWeight.w800)),
-                                Text(restLabel, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
-                              ],
-                            ),
-                          ),
-                          IconButton(onPressed: () => setState(() => restSeconds += 30), icon: const Icon(Icons.add_rounded)),
-                          IconButton(onPressed: _skipRest, icon: const Icon(Icons.skip_next_rounded)),
-                        ],
-                      ),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(22)),
+                      child: Row(children: [
+                        const Icon(Icons.timer_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('استراحت', style: TextStyle(fontWeight: FontWeight.w800)),
+                          Text(restLabel, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        ])),
+                        IconButton(onPressed: () => setState(() => restSeconds += 30), icon: const Icon(Icons.add_rounded)),
+                        IconButton(onPressed: _skipRest, icon: const Icon(Icons.skip_next_rounded)),
+                      ]),
                     ),
                   Expanded(
                     child: ListView.separated(
@@ -314,53 +319,37 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
                         final exercise = widget.exercises[index];
                         final exerciseId = exercise['exercise_id'] as int;
                         final exerciseSets = sets.where((s) => s['exercise_id'] == exerciseId).toList();
-                        final completed = exerciseSets.length;
                         final targetSets = exercise['target_sets'] as int?;
-                        final targetReps = exercise['target_reps'] as String?;
-
+                        final rest = (exercise['rest_seconds'] as num?)?.toInt() ?? 90;
                         return Card(
                           child: Padding(
                             padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(child: Text('${index + 1}')),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                                          const SizedBox(height: 4),
-                                          Text('${targetSets ?? '—'} ست • ${targetReps ?? '—'} تکرار', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                                        ],
-                                      ),
-                                    ),
-                                    Text('$completed/${targetSets ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                                  ],
-                                ),
-                                if (exerciseSets.isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  ...exerciseSets.map((set) => ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
-                                        title: Text('${set['reps'] ?? '—'} تکرار × ${set['weight'] ?? '—'} kg'),
-                                        subtitle: set['rpe'] == null ? null : Text('RPE ${set['rpe']}'),
-                                        trailing: const Icon(Icons.edit_outlined, size: 20),
-                                        onTap: () => _editSet(set),
-                                      )),
-                                ],
-                                const SizedBox(height: 12),
-                                FilledButton.tonalIcon(
-                                  onPressed: () => _addSet(exercise),
-                                  icon: const Icon(Icons.add_rounded),
-                                  label: Text('ثبت ست ${completed + 1}'),
-                                ),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                              Row(children: [
+                                CircleAvatar(child: Text('${index + 1}')),
+                                const SizedBox(width: 12),
+                                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(exercise['name'] as String, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                                  const SizedBox(height: 4),
+                                  Text('${targetSets ?? '—'} ست • ${exercise['target_reps'] ?? '—'} تکرار • استراحت ${rest}s', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                ])),
+                                Text('${exerciseSets.length}/${targetSets ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                              ]),
+                              if (exerciseSets.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                ...exerciseSets.map((set) => ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
+                                  title: Text('${set['reps'] ?? '—'} تکرار × ${set['weight'] ?? '—'} kg'),
+                                  subtitle: Text([_setTypeLabel(set['set_type'] as String?), if (set['rpe'] != null) 'RPE ${set['rpe']}', if (set['superset_group'] != null) 'سوپرست ${set['superset_group']}'].join(' • ')),
+                                  trailing: const Icon(Icons.edit_outlined, size: 20),
+                                  onTap: () => _editSet(set),
+                                )),
                               ],
-                            ),
+                              const SizedBox(height: 12),
+                              FilledButton.tonalIcon(onPressed: () => _addSet(exercise), icon: const Icon(Icons.add_rounded), label: Text('ثبت ست ${exerciseSets.length + 1}')),
+                            ]),
                           ),
                         );
                       },
@@ -370,11 +359,7 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
               ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: finishing ? null : _finish,
-            icon: const Icon(Icons.flag_rounded),
-            label: Text(finishing ? 'در حال ذخیره...' : 'پایان تمرین'),
-          ),
+          child: FilledButton.icon(onPressed: finishing ? null : _finish, icon: const Icon(Icons.flag_rounded), label: Text(finishing ? 'در حال ذخیره...' : 'پایان تمرین')),
         ),
       ),
     );
