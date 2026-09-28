@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/backup/google_drive_backup_service.dart';
 import '../../core/backup/local_backup_service.dart';
 import '../../core/database/active_session_repository.dart';
 import '../../core/database/workout_repository.dart';
@@ -190,7 +189,7 @@ class _DashboardState extends State<_Dashboard> {
               Card(child: ListTile(
                 leading: Icon(Icons.lock_outline_rounded, color: colors.primary),
                 title: const Text('اطلاعاتت روی دستگاه می‌ماند'),
-                subtitle: const Text('بکاپ فقط وقتی خودت انتخاب کنی ساخته می‌شود.'),
+                subtitle: const Text('تمرینو بدون حساب کاربری و بدون فضای ابری کار می‌کند.'),
               )),
             ],
           ),
@@ -260,7 +259,6 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final local = LocalBackupService();
-    final drive = GoogleDriveBackupService();
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -275,16 +273,26 @@ class _SettingsPageState extends State<_SettingsPage> {
         )),
         const SizedBox(height: 14),
         Card(child: Column(children: [
-          ListTile(leading: const Icon(Icons.save_alt_rounded), title: const Text('بکاپ محلی'), subtitle: const Text('ذخیره فایل اطلاعات روی گوشی'), onTap: busy ? null : () => run(() async { await local.exportBackup(); }, 'بکاپ محلی ساخته شد.')),
+          ListTile(
+            leading: const Icon(Icons.save_alt_rounded),
+            title: const Text('بکاپ محلی'),
+            subtitle: const Text('ذخیره فایل اطلاعات روی گوشی'),
+            onTap: busy ? null : () => run(() async { await local.exportBackup(); }, 'بکاپ محلی ساخته شد.'),
+          ),
           const Divider(height: 1),
-          ListTile(leading: const Icon(Icons.restore_rounded), title: const Text('بازیابی بکاپ محلی'), onTap: busy ? null : () => run(local.restoreFromPicker, 'اطلاعات بازیابی شد.')),
+          ListTile(
+            leading: const Icon(Icons.restore_rounded),
+            title: const Text('بازیابی بکاپ محلی'),
+            subtitle: const Text('بازیابی اطلاعات از فایل بکاپ'),
+            onTap: busy ? null : () => run(local.restoreFromPicker, 'اطلاعات بازیابی شد.'),
+          ),
         ])),
         const SizedBox(height: 14),
-        Card(child: Column(children: [
-          ListTile(leading: const Icon(Icons.cloud_upload_outlined), title: const Text('بکاپ Google Drive'), subtitle: const Text('ذخیره خصوصی در فضای مخصوص تمرینو'), onTap: busy ? null : () => run(drive.uploadBackup, 'بکاپ در Google Drive ذخیره شد.')),
-          const Divider(height: 1),
-          ListTile(leading: const Icon(Icons.cloud_download_outlined), title: const Text('بازیابی از Google Drive'), onTap: busy ? null : () => run(drive.restoreLatest, 'آخرین بکاپ Google Drive بازیابی شد.')),
-        ])),
+        const Card(child: ListTile(
+          leading: Icon(Icons.shield_outlined),
+          title: Text('حریم خصوصی'),
+          subtitle: Text('اطلاعات تمرین فقط روی دستگاه ذخیره می‌شود و بکاپ ابری در برنامه وجود ندارد.'),
+        )),
         if (busy) ...[const SizedBox(height: 18), const Center(child: CircularProgressIndicator())],
       ],
     );
