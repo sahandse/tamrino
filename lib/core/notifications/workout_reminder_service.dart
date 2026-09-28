@@ -13,24 +13,28 @@ class WorkoutReminderService {
 
   Future<void> initialize() async {
     if (_ready) return;
+
     tzdata.initializeTimeZones();
     try {
       final localName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(localName));
     } catch (_) {
-      // در صورت خطا، timezone با مقدار پیش‌فرض خود ادامه می‌دهد.
+      // Timezone is optional during startup. Scheduling can still use tz.local.
     }
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('@drawable/tamrino_launcher');
     const ios = DarwinInitializationSettings();
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: ios),
     );
 
+    _ready = true;
+  }
+
+  Future<void> _requestPermissionIfNeeded() async {
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.requestNotificationsPermission();
-    _ready = true;
   }
 
   Future<void> scheduleWeekly({
@@ -41,6 +45,8 @@ class WorkoutReminderService {
     required int minute,
   }) async {
     await initialize();
+    await _requestPermissionIfNeeded();
+
     final next = _nextWeekdayTime(weekday, hour, minute);
 
     await _plugin.zonedSchedule(
