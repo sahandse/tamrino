@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:google_sign_in/google_sign_in.dart';
@@ -9,20 +10,52 @@ import 'local_backup_service.dart';
 
 class GoogleDriveBackupService {
   static const _scope = 'https://www.googleapis.com/auth/drive.appdata';
+  final GoogleSignIn _signIn = GoogleSignIn.instance;
+  bool _initialized = false;
+
+  Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    await _signIn.initialize();
+    _initialized = true;
+  }
 
   Future<GoogleSignInAccount> _account() async {
-    final signIn = GoogleSignIn(scopes: const [_scope]);
-    final current = signIn.currentUser ?? await signIn.signInSilently();
-    final account = current ?? await signIn.signIn();
-    if (account == null) throw StateError('ورود به حساب گوگل لغو شد.');
+    await _ensureInitialized();
+
+    GoogleSignInAccount? account;
+    final completer = Completer<GoogleSignInAccount?>();
+    late final StreamSubscription sub;
+
+    sub = _signIn.authenticationEvents.listen((event) {
+      if (event is GoogleSignInAuthenticationEventSignIn && !completer.isCompleted) {
+        completer.complete(event.user);
+      } else if (event is GoogleSignInAuthenticationEventSignOut && !completer.isCompleted) {
+        completer.complete(null);
+      }
+    });
+
+    try {
+      final light = _signIn.attemptLightweightAuthentication();
+      if (light != null) account = await light;
+
+      account ??= await completer.future.timeout(
+        const Duration(milliseconds: 600),
+        onTimeout: () => null,
+      );
+    } catch (_) {
+      account = null;
+    } finally {
+      await sub.cancel();
+    }
+
+    account ??= await _signIn.authenticate(scopeHint: const [_scope]);
     return account;
   }
 
   Future<_GoogleAuthClient> _client() async {
     final account = await _account();
-    final auth = await account.authentication;
-    if (auth.accessToken == null) throw StateError('توکن Google Drive دریافت نشد.');
-    return _GoogleAuthClient(auth.accessToken!);
+    final auth = await account.authorizationClient.authorizeScopes(const [_scope]);
+    return _GoogleAuthClient(() async => auth.accessToken);
   }
 
   Future<void> uploadBackup() async {
@@ -91,14 +124,14 @@ class GoogleDriveBackupService {
 }
 
 class _GoogleAuthClient extends http.BaseClient {
-  _GoogleAuthClient(this.token);
+  _GoogleAuthClient(this.tokenProvider);
 
-  final String token;
+  final Future<String> Function() tokenProvider;
   final http.Client _inner = http.Client();
 
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) {
-    request.headers['Authorization'] = 'Bearer $token';
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    request.headers['Authorization'] = 'Bearer ${await tokenProvider()}';
     return _inner.send(request);
   }
 
