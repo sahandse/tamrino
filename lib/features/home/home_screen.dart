@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/backup/google_drive_backup_service.dart';
 import '../../core/backup/local_backup_service.dart';
+import '../exercises/exercises_screen.dart';
+import '../progress/progress_screen.dart';
+import '../workouts/workouts_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,9 +20,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       const _Dashboard(),
-      const _EmptyPage(title: 'تمرین‌ها', icon: Icons.fitness_center_rounded, text: 'اولین برنامه تمرینی خودت را بساز.'),
-      const _EmptyPage(title: 'حرکات', icon: Icons.sports_gymnastics_rounded, text: 'هنوز حرکتی ثبت نشده است.'),
-      const _EmptyPage(title: 'پیشرفت', icon: Icons.insights_rounded, text: 'بعد از اولین تمرین، پیشرفت واقعی اینجا نمایش داده می‌شود.'),
+      const WorkoutsScreen(),
+      const ExercisesScreen(),
+      const ProgressScreen(),
       const _SettingsPage(),
     ];
 
@@ -62,43 +65,37 @@ class _Dashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.add_circle_outline_rounded, color: colors.primary),
+                Icon(Icons.fitness_center_rounded, color: colors.primary),
                 const SizedBox(height: 16),
-                Text('هنوز برنامه تمرینی نداری', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Text('آماده تمرین هستی؟', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
-                const Text('هیچ دیتای دمو یا آزمایشی داخل برنامه قرار نگرفته است.'),
+                const Text('از تب تمرین، برنامه واقعی خودت را بساز و ست‌ها را همان لحظه ثبت کن.'),
                 const SizedBox(height: 18),
-                FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.add_rounded), label: const Text('ساخت برنامه تمرینی')),
+                FilledButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('از تب «تمرین» شروع کن'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Icon(Icons.lock_outline_rounded, color: colors.primary),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('اطلاعات تمرین روی گوشی ذخیره می‌شود و فقط با انتخاب خودت بکاپ گرفته می‌شود.'),
+                ),
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _EmptyPage extends StatelessWidget {
-  const _EmptyPage({required this.title, required this.icon, required this.text});
-  final String title;
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
-          const Spacer(),
-          Icon(icon, size: 72, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 18),
-          Text(text, textAlign: TextAlign.center),
-          const Spacer(),
-        ],
-      ),
     );
   }
 }
