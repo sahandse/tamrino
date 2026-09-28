@@ -22,6 +22,12 @@ def ensure_android() -> None:
         )
 
 
+def remove_generated_sample_test() -> None:
+    sample_test = ROOT / "test/widget_test.dart"
+    if sample_test.exists():
+        sample_test.unlink()
+
+
 def patch_manifest() -> None:
     path = ANDROID / "app/src/main/AndroidManifest.xml"
     text = path.read_text(encoding="utf-8")
@@ -34,9 +40,19 @@ def patch_manifest() -> None:
     ]
     for permission in reversed(permissions):
         if permission not in text:
-            text = text.replace("<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">", "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n    " + permission, 1)
+            text = text.replace(
+                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    '
+                + permission,
+                1,
+            )
 
-    text = re.sub(r'android:label="[^"]*"', 'android:label="تمرینو"', text, count=1)
+    text = re.sub(
+        r'android:label="[^"]*"',
+        'android:label="تمرینو"',
+        text,
+        count=1,
+    )
 
     receivers = '''
         <receiver
@@ -54,7 +70,11 @@ def patch_manifest() -> None:
         </receiver>
 '''
     if "ScheduledNotificationReceiver" not in text:
-        text = text.replace("    </application>", receivers + "    </application>", 1)
+        text = text.replace(
+            "    </application>",
+            receivers + "    </application>",
+            1,
+        )
 
     path.write_text(text, encoding="utf-8")
 
@@ -80,7 +100,11 @@ def patch_gradle() -> None:
         )
 
     if "coreLibraryDesugaring(" not in text:
-        dependency = 'dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
+        dependency = (
+            'dependencies {\n'
+            '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n'
+            '}\n'
+        )
         text = text.rstrip() + "\n\n" + dependency
 
     path.write_text(text, encoding="utf-8")
@@ -106,6 +130,7 @@ def patch_main_activity() -> None:
 
 def main() -> None:
     ensure_android()
+    remove_generated_sample_test()
     patch_manifest()
     patch_gradle()
     patch_main_activity()
