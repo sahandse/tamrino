@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/backup/local_backup_service.dart';
+import '../../core/branding/tamrino_logo.dart';
 import '../../core/database/active_session_repository.dart';
+import '../../core/database/advanced_workout_repository.dart';
 import '../../core/database/workout_repository.dart';
 import '../exercises/exercises_screen.dart';
 import '../progress/progress_screen.dart';
@@ -38,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIndex: index,
           onDestinationSelected: (value) => setState(() => index = value),
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'خانه'),
+            NavigationDestination(icon: TamrinoLogo(size: 25), selectedIcon: TamrinoLogo(size: 28), label: 'خانه'),
             NavigationDestination(icon: Icon(Icons.fitness_center_outlined), label: 'تمرین'),
             NavigationDestination(icon: Icon(Icons.sports_gymnastics_outlined), label: 'حرکات'),
             NavigationDestination(icon: Icon(Icons.insights_outlined), label: 'پیشرفت'),
@@ -60,11 +62,12 @@ class _Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<_Dashboard> {
   final repo = WorkoutRepository();
+  final advanced = AdvancedWorkoutRepository();
   final activeRepo = ActiveSessionRepository();
 
   Future<_DashboardData> _load() async {
     final summary = await repo.getProgressSummary();
-    final plans = await repo.getPlansForWeekday(DateTime.now().weekday);
+    final plans = await advanced.getPlansForDate(DateTime.now());
     final recent = await repo.getRecentSessions(limit: 1);
     final active = await activeRepo.getActiveSession();
     return _DashboardData(summary, plans, recent, active);
@@ -118,6 +121,8 @@ class _DashboardState extends State<_Dashboard> {
             padding: const EdgeInsets.all(20),
             children: [
               Row(children: [
+                const TamrinoLogo(size: 58),
+                const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('تمرینو', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
@@ -136,7 +141,7 @@ class _DashboardState extends State<_Dashboard> {
                     padding: const EdgeInsets.all(20),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Row(children: [
-                        Icon(Icons.play_circle_fill_rounded, color: colors.primary),
+                        const TamrinoLogo(size: 38),
                         const SizedBox(width: 10),
                         Expanded(child: Text('جلسه تمرین فعال', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
                       ]),
@@ -162,6 +167,10 @@ class _DashboardState extends State<_Dashboard> {
                     Text(todayPlan == null ? 'برنامه امروز مشخص نشده' : 'تمرین امروز', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 6),
                     Text(todayPlan == null ? 'از بخش تمرین برای برنامه‌ها روز هفته تعیین کن.' : todayPlan['name'] as String),
+                    if (todayPlan?['scheduled_date'] != null) ...[
+                      const SizedBox(height: 6),
+                      Text('برای همین هفته جابه‌جا شده', style: TextStyle(color: colors.primary, fontWeight: FontWeight.w700)),
+                    ],
                     const SizedBox(height: 16),
                     FilledButton.icon(onPressed: widget.onOpenWorkouts, icon: const Icon(Icons.arrow_back_rounded), label: Text(todayPlan == null ? 'مدیریت برنامه‌ها' : 'رفتن به تمرین')),
                   ]),
@@ -180,14 +189,14 @@ class _DashboardState extends State<_Dashboard> {
                 Text('آخرین تمرین', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
                 Card(child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.history_rounded)),
+                  leading: const CircleAvatar(child: TamrinoLogo(size: 24)),
                   title: Text(data!.recent.first['plan_name'] as String? ?? 'تمرین'),
                   subtitle: Text('${data.recent.first['set_count'] ?? 0} ست'),
                 )),
               ],
               const SizedBox(height: 14),
               Card(child: ListTile(
-                leading: Icon(Icons.lock_outline_rounded, color: colors.primary),
+                leading: const TamrinoLogo(size: 34),
                 title: const Text('اطلاعاتت روی دستگاه می‌ماند'),
                 subtitle: const Text('تمرینو بدون حساب کاربری و بدون فضای ابری کار می‌کند.'),
               )),
@@ -262,6 +271,8 @@ class _SettingsPageState extends State<_SettingsPage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        const TamrinoLogo(size: 54, showWordmark: true),
+        const SizedBox(height: 8),
         Text('بیشتر', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
         const SizedBox(height: 20),
         Card(child: ListTile(
@@ -289,7 +300,7 @@ class _SettingsPageState extends State<_SettingsPage> {
         ])),
         const SizedBox(height: 14),
         const Card(child: ListTile(
-          leading: Icon(Icons.shield_outlined),
+          leading: TamrinoLogo(size: 34),
           title: Text('حریم خصوصی'),
           subtitle: Text('اطلاعات تمرین فقط روی دستگاه ذخیره می‌شود و بکاپ ابری در برنامه وجود ندارد.'),
         )),
