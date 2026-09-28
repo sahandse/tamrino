@@ -15,7 +15,7 @@ class AppDatabase {
 
     _database = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async => _createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -33,6 +33,12 @@ class AppDatabase {
           await db.execute('ALTER TABLE exercises ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
           await db.execute('ALTER TABLE workout_plans ADD COLUMN weekday INTEGER');
         }
+        if (oldVersion < 4) {
+          await db.execute("ALTER TABLE exercises ADD COLUMN exercise_mode TEXT NOT NULL DEFAULT 'reps'");
+          await db.execute('ALTER TABLE exercises ADD COLUMN is_bodyweight INTEGER NOT NULL DEFAULT 0');
+          await db.execute('ALTER TABLE exercises ADD COLUMN per_side INTEGER NOT NULL DEFAULT 0');
+          await db.execute('ALTER TABLE workout_sets ADD COLUMN duration_seconds INTEGER');
+        }
       },
     );
     return _database!;
@@ -47,6 +53,9 @@ class AppDatabase {
         equipment TEXT,
         notes TEXT,
         is_favorite INTEGER NOT NULL DEFAULT 0,
+        exercise_mode TEXT NOT NULL DEFAULT 'reps',
+        is_bodyweight INTEGER NOT NULL DEFAULT 0,
+        per_side INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       )
     ''');
@@ -90,6 +99,7 @@ class AppDatabase {
         set_number INTEGER NOT NULL,
         reps INTEGER,
         weight REAL,
+        duration_seconds INTEGER,
         rpe REAL,
         completed INTEGER NOT NULL DEFAULT 1,
         set_type TEXT NOT NULL DEFAULT 'normal',
