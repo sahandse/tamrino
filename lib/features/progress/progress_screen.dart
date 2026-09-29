@@ -20,7 +20,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final sessions = await repo.getRecentSessions();
     final records = await repo.getPersonalRecords();
     final trend = await repo.getVolumeTrend();
-    final activity = await repo.getActivityDays();
+    final activity = await repo.getActivityDays(days: 365);
     return _ProgressData(summary, sessions, records, trend, activity);
   }
 
@@ -30,7 +30,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
       future: _load(),
       builder: (context, snapshot) {
         final data = snapshot.data;
-
         return RefreshIndicator(
           onRefresh: () async => setState(() {}),
           child: ListView(
@@ -72,7 +71,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 const SizedBox(height: 10),
                 _SummaryCard(title: 'حجم کل تمرین', value: '${_formatNumber(data.summary['total_volume'])} kg', icon: Icons.monitor_weight_outlined),
                 const SizedBox(height: 22),
-                Text('فعالیت ۱۲ هفته اخیر', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                Text('فعالیت ۱۲ ماه اخیر', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 12),
                 _ActivityHeatmap(items: data.activity),
                 const SizedBox(height: 22),
@@ -170,30 +169,53 @@ class _ActivityHeatmap extends StatelessWidget {
   Widget build(BuildContext context) {
     final counts = <String, int>{for (final item in items) item['day'] as String: (item['workout_count'] as num?)?.toInt() ?? 0};
     final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 83));
+    final end = DateTime(today.year, today.month, today.day);
+    final start = end.subtract(const Duration(days: 364));
+    final alignedStart = start.subtract(Duration(days: start.weekday % 7));
+    final totalDays = end.difference(alignedStart).inDays + 1;
+    final weeks = (totalDays / 7).ceil();
     final primary = Theme.of(context).colorScheme.primary;
     final empty = Theme.of(context).colorScheme.surfaceContainerHighest;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 5,
-          runSpacing: 5,
-          children: List.generate(84, (index) {
-            final day = start.add(Duration(days: index));
-            final key = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-            final count = counts[key] ?? 0;
-            final opacity = count == 0 ? 1.0 : (0.28 + (count.clamp(1, 4) * 0.18)).clamp(0.0, 1.0);
-            return Tooltip(
-              message: count == 0 ? 'بدون تمرین' : '$count تمرین',
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(color: count == 0 ? empty : primary.withValues(alpha: opacity), borderRadius: BorderRadius.circular(5)),
-              ),
-            );
-          }),
+        padding: const EdgeInsets.all(14),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          reverse: true,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: List.generate(weeks, (weekIndex) {
+              return Padding(
+                padding: const EdgeInsetsDirectional.only(end: 4),
+                child: Column(
+                  children: List.generate(7, (dayIndex) {
+                    final day = alignedStart.add(Duration(days: weekIndex * 7 + dayIndex));
+                    if (day.isBefore(start) || day.isAfter(end)) {
+                      return const SizedBox(width: 13, height: 17);
+                    }
+                    final key = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+                    final count = counts[key] ?? 0;
+                    final opacity = count == 0 ? 1.0 : (0.30 + count.clamp(1, 4) * .17).clamp(0.0, 1.0);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Tooltip(
+                        message: count == 0 ? '$key • بدون تمرین' : '$key • $count تمرین',
+                        child: Container(
+                          width: 13,
+                          height: 13,
+                          decoration: BoxDecoration(
+                            color: count == 0 ? empty : primary.withValues(alpha: opacity),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              );
+            }),
+          ),
         ),
       ),
     );
