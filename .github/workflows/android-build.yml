@@ -35,6 +35,9 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
+      - name: Build public exercise metadata asset
+        run: python3 tool/fetch_public_exercise_library.py
+
       - name: Bootstrap Android project
         run: python3 tool/bootstrap_android.py
 
