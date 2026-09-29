@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/database/workout_repository.dart';
+import '../../core/settings/app_preferences.dart';
 
 class TrainingCalendarScreen extends StatefulWidget {
   const TrainingCalendarScreen({super.key});
@@ -12,6 +13,15 @@ class TrainingCalendarScreen extends StatefulWidget {
 class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
   final repo = WorkoutRepository();
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
+  int weekStart = DateTime.saturday;
+
+  @override
+  void initState() {
+    super.initState();
+    AppPreferences.instance.weekStart().then((value) {
+      if (mounted) setState(() => weekStart = value);
+    });
+  }
 
   void _changeMonth(int delta) {
     setState(() => month = DateTime(month.year, month.month + delta));
@@ -47,10 +57,7 @@ class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
                     child: Text(
                       '${month.year}/${month.month.toString().padLeft(2, '0')}',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w900),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
                     ),
                   ),
                   IconButton(
@@ -59,14 +66,11 @@ class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                _MonthGrid(month: month, sessions: sessions),
+                _MonthGrid(month: month, sessions: sessions, weekStart: weekStart),
                 const SizedBox(height: 24),
                 Text(
                   'درگیری عضلات • ۳۰ روز اخیر',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 12),
                 if (muscles.isEmpty)
@@ -95,9 +99,7 @@ class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
                                 Expanded(
                                   child: Text(
                                     m['muscle'] as String? ?? 'نامشخص',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                    ),
+                                    style: const TextStyle(fontWeight: FontWeight.w900),
                                   ),
                                 ),
                                 Text('${m['set_count'] ?? 0} ست'),
@@ -111,11 +113,7 @@ class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
                               const SizedBox(height: 6),
                               Text(
                                 '${volume.toStringAsFixed(volume % 1 == 0 ? 0 : 1)} kg حجم تمرین',
-                                style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),
@@ -133,16 +131,29 @@ class _TrainingCalendarScreenState extends State<TrainingCalendarScreen> {
 }
 
 class _MonthGrid extends StatelessWidget {
-  const _MonthGrid({required this.month, required this.sessions});
+  const _MonthGrid({required this.month, required this.sessions, required this.weekStart});
 
   final DateTime month;
   final List<Map<String, Object?>> sessions;
+  final int weekStart;
+
+  static const _labels = <int, String>{
+    DateTime.monday: 'د',
+    DateTime.tuesday: 'س',
+    DateTime.wednesday: 'چ',
+    DateTime.thursday: 'پ',
+    DateTime.friday: 'ج',
+    DateTime.saturday: 'ش',
+    DateTime.sunday: 'ی',
+  };
+
+  List<int> get _weekdays => List.generate(7, (index) => ((weekStart - 1 + index) % 7) + 1);
 
   @override
   Widget build(BuildContext context) {
     final first = DateTime(month.year, month.month, 1);
     final days = DateTime(month.year, month.month + 1, 0).day;
-    final startOffset = (first.weekday + 1) % 7;
+    final startOffset = (first.weekday - weekStart + 7) % 7;
     final activeDays = <int, int>{};
 
     for (final session in sessions) {
@@ -152,19 +163,17 @@ class _MonthGrid extends StatelessWidget {
       }
     }
 
-    const weekDays = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
             Row(
-              children: weekDays
+              children: _weekdays
                   .map(
                     (day) => Expanded(
                       child: Text(
-                        day,
+                        _labels[day] ?? '',
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
@@ -199,9 +208,7 @@ class _MonthGrid extends StatelessWidget {
                         child: Text(
                           '$day',
                           style: TextStyle(
-                            fontWeight: count > 0
-                                ? FontWeight.w900
-                                : FontWeight.w500,
+                            fontWeight: count > 0 ? FontWeight.w900 : FontWeight.w500,
                           ),
                         ),
                       ),
