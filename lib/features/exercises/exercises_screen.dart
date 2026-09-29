@@ -5,6 +5,7 @@ import '../../core/branding/tamrino_logo.dart';
 import '../../core/database/open_gym_feature_repository.dart';
 import '../../core/database/public_exercise_library_service.dart';
 import '../../core/database/workout_repository.dart';
+import 'exercise_history_screen.dart';
 
 class ExercisesScreen extends StatefulWidget {
   const ExercisesScreen({super.key});
@@ -51,15 +52,11 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
     try {
       final inserted = await publicLibrary.importBundledLibrary();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$inserted حرکت جدید به کتابخانه اضافه شد.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$inserted حرکت جدید به کتابخانه اضافه شد.')));
       setState(() {});
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطا در افزودن کتابخانه: $error')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در افزودن کتابخانه: $error')));
     } finally {
       if (mounted) setState(() => importing = false);
     }
@@ -71,9 +68,7 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
     final equipment = TextEditingController(text: item?['equipment'] as String? ?? '');
     final notes = TextEditingController(text: item?['notes'] as String? ?? '');
     final guideUrl = TextEditingController(text: item?['guide_url'] as String? ?? '');
-
-    var trackingType = item?['tracking_type'] as String? ??
-        ((item?['exercise_mode'] as String?) == 'timed' ? 'timed' : 'strength');
+    var trackingType = item?['tracking_type'] as String? ?? ((item?['exercise_mode'] as String?) == 'timed' ? 'timed' : 'strength');
     var isBodyweight = item?['is_bodyweight'] == 1;
     var perSide = item?['per_side'] == 1;
     var mediaPath = item?['media_path'] as String?;
@@ -151,11 +146,7 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                       final ext = (file.extension ?? '').toLowerCase();
                       modalSetState(() {
                         mediaPath = path;
-                        mediaType = {'mp4', 'webm'}.contains(ext)
-                            ? 'video'
-                            : ext == 'gif'
-                                ? 'gif'
-                                : 'image';
+                        mediaType = {'mp4', 'webm'}.contains(ext) ? 'video' : ext == 'gif' ? 'gif' : 'image';
                       });
                     },
                     icon: const Icon(Icons.perm_media_outlined),
@@ -164,25 +155,22 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   if (mediaPath != null) ...[
                     const SizedBox(height: 6),
                     Row(children: [
-                      Expanded(
-                        child: Text(
-                          'مدیای محلی انتخاب شده • ${mediaType ?? 'media'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => modalSetState(() {
-                          mediaPath = null;
-                          mediaType = null;
-                        }),
-                        child: const Text('حذف'),
-                      ),
+                      Expanded(child: Text('مدیای محلی انتخاب شده • ${mediaType ?? 'media'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)),
+                      TextButton(onPressed: () => modalSetState(() { mediaPath = null; mediaType = null; }), child: const Text('حذف')),
                     ]),
                   ],
                   const SizedBox(height: 4),
                   TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'یادداشت / توضیحات')),
+                  if (item != null) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => ExerciseHistoryScreen(exerciseId: item['id'] as int),
+                      )),
+                      icon: const Icon(Icons.insights_outlined),
+                      label: const Text('تاریخچه و روند این حرکت'),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () async {
@@ -199,7 +187,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                               perSide: trackingType == 'strength' && perSide,
                             )
                           : item['id'] as int;
-
                       if (item != null) {
                         await repo.updateExercise(
                           exerciseId: exerciseId,
@@ -212,7 +199,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                           perSide: trackingType == 'strength' && perSide,
                         );
                       }
-
                       await features.setExerciseTracking(
                         exerciseId: exerciseId,
                         trackingType: trackingType,
@@ -220,7 +206,6 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                         mediaType: mediaType,
                         guideUrl: guideUrl.text,
                       );
-
                       if (context.mounted) Navigator.pop(context, true);
                     },
                     child: const Text('ذخیره'),
@@ -241,20 +226,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
       future: repo.getExercises(),
       builder: (context, snapshot) {
         final all = snapshot.data ?? const [];
-        final muscles = all
-            .map((e) => e['muscle_group'] as String?)
-            .whereType<String>()
-            .where((e) => e.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-        final equipment = all
-            .map((e) => e['equipment'] as String?)
-            .whereType<String>()
-            .where((e) => e.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+        final muscles = all.map((e) => e['muscle_group'] as String?).whereType<String>().where((e) => e.isNotEmpty).toSet().toList()..sort();
+        final equipment = all.map((e) => e['equipment'] as String?).whereType<String>().where((e) => e.isNotEmpty).toSet().toList()..sort();
         final items = all.where((e) {
           final name = (e['name'] as String).toLowerCase();
           if (!name.contains(query.toLowerCase())) return false;
@@ -267,114 +240,90 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
         return Scaffold(
           body: Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  const TamrinoLogo(size: 38),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text('حرکات', style: Theme.of(context).textTheme.headlineSmall)),
-                  IconButton(
-                    onPressed: importing ? null : _importPublicLibrary,
-                    icon: importing
-                        ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.library_add_outlined),
-                    tooltip: 'کتابخانه عمومی',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                const TamrinoLogo(size: 38),
+                const SizedBox(width: 10),
+                Expanded(child: Text('حرکات', style: Theme.of(context).textTheme.headlineSmall)),
+                IconButton(
+                  onPressed: importing ? null : _importPublicLibrary,
+                  icon: importing ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.library_add_outlined),
+                  tooltip: 'کتابخانه عمومی',
+                ),
+                IconButton.filled(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded)),
+              ]),
+              const SizedBox(height: 18),
+              TextField(onChanged: (value) => setState(() => query = value), decoration: const InputDecoration(hintText: 'جستجو', prefixIcon: Icon(Icons.search_rounded))),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 42,
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  FilterChip(label: const Text('★ علاقه‌مندی'), selected: favoritesOnly, onSelected: (v) => setState(() => favoritesOnly = v)),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    onSelected: (v) => setState(() => muscleFilter = v == '__all' ? null : v),
+                    itemBuilder: (_) => [const PopupMenuItem(value: '__all', child: Text('همه عضلات')), ...muscles.map((m) => PopupMenuItem(value: m, child: Text(m)))],
+                    child: Chip(label: Text(muscleFilter ?? 'عضله')),
                   ),
-                  IconButton.filled(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded)),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    onSelected: (v) => setState(() => equipmentFilter = v == '__all' ? null : v),
+                    itemBuilder: (_) => [const PopupMenuItem(value: '__all', child: Text('همه تجهیزات')), ...equipment.map((m) => PopupMenuItem(value: m, child: Text(m)))],
+                    child: Chip(label: Text(equipmentFilter ?? 'تجهیزات')),
+                  ),
                 ]),
-                const SizedBox(height: 18),
-                TextField(
-                  onChanged: (value) => setState(() => query = value),
-                  decoration: const InputDecoration(hintText: 'جستجو', prefixIcon: Icon(Icons.search_rounded)),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 42,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      FilterChip(label: const Text('★ علاقه‌مندی'), selected: favoritesOnly, onSelected: (v) => setState(() => favoritesOnly = v)),
-                      const SizedBox(width: 8),
-                      PopupMenuButton<String>(
-                        onSelected: (v) => setState(() => muscleFilter = v == '__all' ? null : v),
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(value: '__all', child: Text('همه عضلات')),
-                          ...muscles.map((m) => PopupMenuItem(value: m, child: Text(m))),
-                        ],
-                        child: Chip(label: Text(muscleFilter ?? 'عضله')),
-                      ),
-                      const SizedBox(width: 8),
-                      PopupMenuButton<String>(
-                        onSelected: (v) => setState(() => equipmentFilter = v == '__all' ? null : v),
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(value: '__all', child: Text('همه تجهیزات')),
-                          ...equipment.map((m) => PopupMenuItem(value: m, child: Text(m))),
-                        ],
-                        child: Chip(label: Text(equipmentFilter ?? 'تجهیزات')),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: snapshot.connectionState == ConnectionState.waiting
-                      ? const Center(child: CircularProgressIndicator())
-                      : items.isEmpty
-                          ? const _EmptyExercises()
-                          : ListView.separated(
-                              padding: const EdgeInsets.only(bottom: 24),
-                              itemCount: items.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: 8),
-                              itemBuilder: (context, index) {
-                                final item = items[index];
-                                final tracking = item['tracking_type'] as String? ??
-                                    (item['exercise_mode'] == 'timed' ? 'timed' : 'strength');
-                                final tags = <String>[
-                                  if ((item['muscle_group'] as String?)?.isNotEmpty == true) item['muscle_group'] as String,
-                                  if ((item['equipment'] as String?)?.isNotEmpty == true) item['equipment'] as String,
-                                  if (tracking == 'timed') 'زمانی',
-                                  if (tracking == 'cardio') 'کاردیو',
-                                  if (item['is_bodyweight'] == 1) 'وزن بدن',
-                                  if (item['per_side'] == 1) 'هر سمت',
-                                  if (item['media_path'] != null) 'مدیا',
-                                ];
-                                final icon = tracking == 'cardio'
-                                    ? Icons.directions_run_rounded
-                                    : tracking == 'timed'
-                                        ? Icons.timer_outlined
-                                        : Icons.fitness_center_rounded;
-                                return Card(
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                    leading: Container(
-                                      width: 42,
-                                      height: 42,
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .08),
-                                        borderRadius: BorderRadius.circular(13),
-                                      ),
-                                      child: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-                                    ),
-                                    title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                    subtitle: tags.isEmpty
-                                        ? null
-                                        : Text(tags.join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    trailing: IconButton(
-                                      icon: Icon(item['is_favorite'] == 1 ? Icons.star_rounded : Icons.star_border_rounded),
-                                      onPressed: () async {
-                                        await repo.toggleExerciseFavorite(item['id'] as int, item['is_favorite'] != 1);
-                                        if (mounted) setState(() {});
-                                      },
-                                    ),
-                                    onTap: () => _openExerciseEditor(item),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: snapshot.connectionState == ConnectionState.waiting
+                    ? const Center(child: CircularProgressIndicator())
+                    : items.isEmpty
+                        ? const _EmptyExercises()
+                        : ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              final tracking = item['tracking_type'] as String? ?? (item['exercise_mode'] == 'timed' ? 'timed' : 'strength');
+                              final tags = <String>[
+                                if ((item['muscle_group'] as String?)?.isNotEmpty == true) item['muscle_group'] as String,
+                                if ((item['equipment'] as String?)?.isNotEmpty == true) item['equipment'] as String,
+                                if (tracking == 'timed') 'زمانی',
+                                if (tracking == 'cardio') 'کاردیو',
+                                if (item['is_bodyweight'] == 1) 'وزن بدن',
+                                if (item['per_side'] == 1) 'هر سمت',
+                                if (item['media_path'] != null) 'مدیا',
+                              ];
+                              final icon = tracking == 'cardio' ? Icons.directions_run_rounded : tracking == 'timed' ? Icons.timer_outlined : Icons.fitness_center_rounded;
+                              return Card(
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                  leading: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .08), borderRadius: BorderRadius.circular(13)),
+                                    child: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
                                   ),
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
+                                  title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  subtitle: tags.isEmpty ? null : Text(tags.join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  trailing: IconButton(
+                                    icon: Icon(item['is_favorite'] == 1 ? Icons.star_rounded : Icons.star_border_rounded),
+                                    onPressed: () async {
+                                      await repo.toggleExerciseFavorite(item['id'] as int, item['is_favorite'] != 1);
+                                      if (mounted) setState(() {});
+                                    },
+                                  ),
+                                  onTap: () => _openExerciseEditor(item),
+                                  onLongPress: () => Navigator.of(context).push(MaterialPageRoute(
+                                    builder: (_) => ExerciseHistoryScreen(exerciseId: item['id'] as int),
+                                  )),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+            ]),
           ),
         );
       },
