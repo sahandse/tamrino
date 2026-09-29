@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/branding/tamrino_logo.dart';
 import '../../core/database/open_gym_feature_repository.dart';
+import '../../core/database/public_exercise_library_service.dart';
 import '../../core/database/workout_repository.dart';
 
 class ExercisesScreen extends StatefulWidget {
@@ -15,10 +16,54 @@ class ExercisesScreen extends StatefulWidget {
 class _ExercisesScreenState extends State<ExercisesScreen> {
   final repo = WorkoutRepository();
   final features = OpenGymFeatureRepository();
+  final publicLibrary = PublicExerciseLibraryService();
   String query = '';
   String? muscleFilter;
   String? equipmentFilter;
   bool favoritesOnly = false;
+  bool importing = false;
+
+  Future<void> _importPublicLibrary() async {
+    if (importing) return;
+    Map<String, Object?> info;
+    try {
+      info = await publicLibrary.bundledInfo();
+    } catch (_) {
+      info = const {};
+    }
+    if (!mounted) return;
+    final count = info['count'] ?? 0;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('افزودن کتابخانه عمومی حرکات'),
+        content: Text(
+          'این Build شامل $count حرکت واقعی از Free Exercise DB با مجوز Public Domain است. فقط نام، عضله، تجهیزات و نوع فعالیت وارد می‌شود؛ تصویر و دستور اجرای حرکت وارد نمی‌شود. موارد هم‌نام با حرکات فعلی رد می‌شوند.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('افزودن')),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    setState(() => importing = true);
+    try {
+      final inserted = await publicLibrary.importBundledLibrary();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$inserted حرکت جدید به کتابخانه اضافه شد.')),
+      );
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطا در افزودن کتابخانه: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => importing = false);
+    }
+  }
 
   Future<void> _openExerciseEditor([Map<String, Object?>? item]) async {
     final name = TextEditingController(text: item?['name'] as String? ?? '');
@@ -42,64 +87,32 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
         builder: (context, modalSetState) => Directionality(
           textDirection: TextDirection.rtl,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              18,
-              4,
-              18,
-              MediaQuery.of(context).viewInsets.bottom + 18,
-            ),
+            padding: EdgeInsets.fromLTRB(18, 4, 18, MediaQuery.of(context).viewInsets.bottom + 18),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    item == null ? 'حرکت جدید' : 'ویرایش حرکت',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  Text(item == null ? 'حرکت جدید' : 'ویرایش حرکت', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 18),
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: 'نام حرکت *'),
-                  ),
+                  TextField(controller: name, decoration: const InputDecoration(labelText: 'نام حرکت *')),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: muscle,
-                        decoration: const InputDecoration(labelText: 'عضله'),
-                      ),
-                    ),
+                    Expanded(child: TextField(controller: muscle, decoration: const InputDecoration(labelText: 'عضله'))),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: equipment,
-                        decoration: const InputDecoration(labelText: 'تجهیزات'),
-                      ),
-                    ),
+                    Expanded(child: TextField(controller: equipment, decoration: const InputDecoration(labelText: 'تجهیزات'))),
                   ]),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: trackingType,
                     decoration: const InputDecoration(labelText: 'نوع فعالیت'),
                     items: const [
-                      DropdownMenuItem(
-                        value: 'strength',
-                        child: Text('قدرتی / تکرار و وزنه'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'timed',
-                        child: Text('زمانی'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'cardio',
-                        child: Text('کاردیو / زمان، مسافت و سرعت'),
-                      ),
+                      DropdownMenuItem(value: 'strength', child: Text('قدرتی / تکرار و وزنه')),
+                      DropdownMenuItem(value: 'timed', child: Text('زمانی')),
+                      DropdownMenuItem(value: 'cardio', child: Text('کاردیو / زمان، مسافت و سرعت')),
                     ],
                     onChanged: (value) {
-                      if (value != null) {
-                        modalSetState(() => trackingType = value);
-                      }
+                      if (value != null) modalSetState(() => trackingType = value);
                     },
                   ),
                   if (trackingType == 'strength') ...[
@@ -122,24 +135,14 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   TextField(
                     controller: guideUrl,
                     keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: 'لینک راهنما یا ویدئو',
-                      hintText: 'اختیاری',
-                    ),
+                    decoration: const InputDecoration(labelText: 'لینک راهنما یا ویدئو', hintText: 'اختیاری'),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: () async {
                       final picked = await FilePicker.platform.pickFiles(
                         type: FileType.custom,
-                        allowedExtensions: const [
-                          'jpg',
-                          'jpeg',
-                          'png',
-                          'gif',
-                          'mp4',
-                          'webm',
-                        ],
+                        allowedExtensions: const ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm'],
                       );
                       if (picked == null || picked.files.isEmpty) return;
                       final file = picked.files.single;
@@ -156,9 +159,7 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                       });
                     },
                     icon: const Icon(Icons.perm_media_outlined),
-                    label: Text(
-                      mediaPath == null ? 'انتخاب عکس / GIF / ویدئو' : 'تغییر مدیای حرکت',
-                    ),
+                    label: Text(mediaPath == null ? 'انتخاب عکس / GIF / ویدئو' : 'تغییر مدیای حرکت'),
                   ),
                   if (mediaPath != null) ...[
                     const SizedBox(height: 6),
@@ -181,11 +182,7 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                     ]),
                   ],
                   const SizedBox(height: 4),
-                  TextField(
-                    controller: notes,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'یادداشت / توضیحات'),
-                  ),
+                  TextField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'یادداشت / توضیحات')),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () async {
@@ -276,24 +273,20 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                 Row(children: [
                   const TamrinoLogo(size: 38),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'حرکات',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
+                  Expanded(child: Text('حرکات', style: Theme.of(context).textTheme.headlineSmall)),
+                  IconButton(
+                    onPressed: importing ? null : _importPublicLibrary,
+                    icon: importing
+                        ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.library_add_outlined),
+                    tooltip: 'کتابخانه عمومی',
                   ),
-                  IconButton.filled(
-                    onPressed: () => _openExerciseEditor(),
-                    icon: const Icon(Icons.add_rounded),
-                  ),
+                  IconButton.filled(onPressed: () => _openExerciseEditor(), icon: const Icon(Icons.add_rounded)),
                 ]),
                 const SizedBox(height: 18),
                 TextField(
                   onChanged: (value) => setState(() => query = value),
-                  decoration: const InputDecoration(
-                    hintText: 'جستجو',
-                    prefixIcon: Icon(Icons.search_rounded),
-                  ),
+                  decoration: const InputDecoration(hintText: 'جستجو', prefixIcon: Icon(Icons.search_rounded)),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -301,40 +294,22 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     children: [
-                      FilterChip(
-                        label: const Text('★ علاقه‌مندی'),
-                        selected: favoritesOnly,
-                        onSelected: (v) => setState(() => favoritesOnly = v),
-                      ),
+                      FilterChip(label: const Text('★ علاقه‌مندی'), selected: favoritesOnly, onSelected: (v) => setState(() => favoritesOnly = v)),
                       const SizedBox(width: 8),
                       PopupMenuButton<String>(
-                        onSelected: (v) => setState(
-                          () => muscleFilter = v == '__all' ? null : v,
-                        ),
+                        onSelected: (v) => setState(() => muscleFilter = v == '__all' ? null : v),
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: '__all',
-                            child: Text('همه عضلات'),
-                          ),
-                          ...muscles.map(
-                            (m) => PopupMenuItem(value: m, child: Text(m)),
-                          ),
+                          const PopupMenuItem(value: '__all', child: Text('همه عضلات')),
+                          ...muscles.map((m) => PopupMenuItem(value: m, child: Text(m))),
                         ],
                         child: Chip(label: Text(muscleFilter ?? 'عضله')),
                       ),
                       const SizedBox(width: 8),
                       PopupMenuButton<String>(
-                        onSelected: (v) => setState(
-                          () => equipmentFilter = v == '__all' ? null : v,
-                        ),
+                        onSelected: (v) => setState(() => equipmentFilter = v == '__all' ? null : v),
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: '__all',
-                            child: Text('همه تجهیزات'),
-                          ),
-                          ...equipment.map(
-                            (m) => PopupMenuItem(value: m, child: Text(m)),
-                          ),
+                          const PopupMenuItem(value: '__all', child: Text('همه تجهیزات')),
+                          ...equipment.map((m) => PopupMenuItem(value: m, child: Text(m))),
                         ],
                         child: Chip(label: Text(equipmentFilter ?? 'تجهیزات')),
                       ),
@@ -356,10 +331,8 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                                 final tracking = item['tracking_type'] as String? ??
                                     (item['exercise_mode'] == 'timed' ? 'timed' : 'strength');
                                 final tags = <String>[
-                                  if ((item['muscle_group'] as String?)?.isNotEmpty == true)
-                                    item['muscle_group'] as String,
-                                  if ((item['equipment'] as String?)?.isNotEmpty == true)
-                                    item['equipment'] as String,
+                                  if ((item['muscle_group'] as String?)?.isNotEmpty == true) item['muscle_group'] as String,
+                                  if ((item['equipment'] as String?)?.isNotEmpty == true) item['equipment'] as String,
                                   if (tracking == 'timed') 'زمانی',
                                   if (tracking == 'cardio') 'کاردیو',
                                   if (item['is_bodyweight'] == 1) 'وزن بدن',
@@ -373,48 +346,24 @@ class _ExercisesScreenState extends State<ExercisesScreen> {
                                         : Icons.fitness_center_rounded;
                                 return Card(
                                   child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 4,
-                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                                     leading: Container(
                                       width: 42,
                                       height: 42,
                                       decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary
-                                            .withValues(alpha: .08),
+                                        color: Theme.of(context).colorScheme.primary.withValues(alpha: .08),
                                         borderRadius: BorderRadius.circular(13),
                                       ),
-                                      child: Icon(
-                                        icon,
-                                        size: 20,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
+                                      child: Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
                                     ),
-                                    title: Text(
-                                      item['name'] as String,
-                                      style: const TextStyle(fontWeight: FontWeight.w800),
-                                    ),
+                                    title: Text(item['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
                                     subtitle: tags.isEmpty
                                         ? null
-                                        : Text(
-                                            tags.join(' • '),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                        : Text(tags.join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis),
                                     trailing: IconButton(
-                                      icon: Icon(
-                                        item['is_favorite'] == 1
-                                            ? Icons.star_rounded
-                                            : Icons.star_border_rounded,
-                                      ),
+                                      icon: Icon(item['is_favorite'] == 1 ? Icons.star_rounded : Icons.star_border_rounded),
                                       onPressed: () async {
-                                        await repo.toggleExerciseFavorite(
-                                          item['id'] as int,
-                                          item['is_favorite'] != 1,
-                                        );
+                                        await repo.toggleExerciseFavorite(item['id'] as int, item['is_favorite'] != 1);
                                         if (mounted) setState(() {});
                                       },
                                     ),
@@ -444,8 +393,9 @@ class _EmptyExercises extends StatelessWidget {
           Text('حرکتی پیدا نشد', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
           Text(
-            'حرکت جدید اضافه کن یا فیلترها را تغییر بده.',
+            'حرکت جدید اضافه کن یا کتابخانه عمومی را به‌صورت اختیاری وارد کن.',
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
           ),
         ]),
       );
