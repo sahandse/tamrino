@@ -15,7 +15,7 @@ class AppDatabase {
 
     _database = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async => _createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -69,6 +69,23 @@ class AppDatabase {
             FOREIGN KEY(exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
           )''');
         }
+        if (oldVersion < 6) {
+          await db.execute("ALTER TABLE exercises ADD COLUMN tracking_type TEXT NOT NULL DEFAULT 'strength'");
+          await db.execute('ALTER TABLE exercises ADD COLUMN media_path TEXT');
+          await db.execute('ALTER TABLE exercises ADD COLUMN media_type TEXT');
+          await db.execute('ALTER TABLE exercises ADD COLUMN guide_url TEXT');
+          await db.execute("ALTER TABLE workout_sets ADD COLUMN effort_scale TEXT NOT NULL DEFAULT 'rpe'");
+          await db.execute('ALTER TABLE workout_sets ADD COLUMN cardio_speed REAL');
+          await db.execute('ALTER TABLE workout_sets ADD COLUMN cardio_distance REAL');
+          await db.execute('''CREATE TABLE IF NOT EXISTS workout_attachments(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            media_type TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE
+          )''');
+        }
       },
     );
     return _database!;
@@ -83,8 +100,12 @@ class AppDatabase {
       notes TEXT,
       is_favorite INTEGER NOT NULL DEFAULT 0,
       exercise_mode TEXT NOT NULL DEFAULT 'reps',
+      tracking_type TEXT NOT NULL DEFAULT 'strength',
       is_bodyweight INTEGER NOT NULL DEFAULT 0,
       per_side INTEGER NOT NULL DEFAULT 0,
+      media_path TEXT,
+      media_type TEXT,
+      guide_url TEXT,
       created_at TEXT NOT NULL
     )''');
     await db.execute('''CREATE TABLE workout_plans(
@@ -127,7 +148,10 @@ class AppDatabase {
       reps INTEGER,
       weight REAL,
       duration_seconds INTEGER,
+      cardio_speed REAL,
+      cardio_distance REAL,
       rpe REAL,
+      effort_scale TEXT NOT NULL DEFAULT 'rpe',
       completed INTEGER NOT NULL DEFAULT 1,
       set_type TEXT NOT NULL DEFAULT 'normal',
       superset_group TEXT,
@@ -167,6 +191,14 @@ class AppDatabase {
       arm REAL,
       thigh REAL,
       notes TEXT
+    )''');
+    await db.execute('''CREATE TABLE workout_attachments(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      file_path TEXT NOT NULL,
+      media_type TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE
     )''');
   }
 
