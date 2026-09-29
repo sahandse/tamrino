@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/database/app_database.dart';
 import 'core/notifications/workout_reminder_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/workout/workout_wakelock_monitor.dart';
 import 'features/home/home_screen.dart';
 
 void main() {
@@ -57,7 +58,7 @@ class TamrinoApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const WorkoutWakeLockMonitor(child: HomeScreen()),
     );
   }
 }
