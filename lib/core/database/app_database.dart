@@ -15,7 +15,7 @@ class AppDatabase {
 
     _database = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async => _createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -85,6 +85,9 @@ class AppDatabase {
             created_at TEXT NOT NULL,
             FOREIGN KEY(session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE
           )''');
+        }
+        if (oldVersion < 7) {
+          await _createAppSettings(db);
         }
       },
     );
@@ -200,6 +203,32 @@ class AppDatabase {
       created_at TEXT NOT NULL,
       FOREIGN KEY(session_id) REFERENCES workout_sessions(id) ON DELETE CASCADE
     )''');
+    await _createAppSettings(db);
+  }
+
+  Future<void> _createAppSettings(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS app_settings(
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL
+    )''');
+    await db.insert(
+      'app_settings',
+      {'setting_key': 'effort_scale', 'setting_value': 'rpe'},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    await db.execute('DROP TRIGGER IF EXISTS apply_default_effort_scale');
+    await db.execute('''CREATE TRIGGER apply_default_effort_scale
+      AFTER INSERT ON workout_sets
+      WHEN NEW.effort_scale = 'rpe'
+      BEGIN
+        UPDATE workout_sets
+        SET effort_scale = COALESCE(
+          (SELECT setting_value FROM app_settings WHERE setting_key = 'effort_scale'),
+          'rpe'
+        )
+        WHERE id = NEW.id;
+      END
+    ''');
   }
 
   Future<String> databasePath() async {
