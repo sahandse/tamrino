@@ -226,6 +226,10 @@ class _AdvancedWorkoutToolsScreenState extends State<AdvancedWorkoutToolsScreen>
     );
   }
 
+  String _plateLabel(double value) {
+    return value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
@@ -354,7 +358,7 @@ class _AdvancedWorkoutToolsScreenState extends State<AdvancedWorkoutToolsScreen>
                 ),
                 ListTile(
                   title: const Text('صفحات وزنه موجود'),
-                  subtitle: Text(_plates.map((e) => '${e:g}').join('، ').replaceAll(':g', '')),
+                  subtitle: Text(_plates.map(_plateLabel).join('، ')),
                   trailing: const Icon(Icons.edit_outlined),
                   onTap: _editPlates,
                 ),
