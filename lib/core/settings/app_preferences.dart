@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../database/app_database.dart';
+
 class AppPreferences {
   AppPreferences._();
   static final AppPreferences instance = AppPreferences._();
@@ -23,12 +25,29 @@ class AppPreferences {
 
   Future<String> effortScale() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_effortScaleKey) ?? 'rpe';
+    final value = prefs.getString(_effortScaleKey) == 'rir' ? 'rir' : 'rpe';
+    await _syncEffortScaleToDatabase(value);
+    return value;
   }
 
   Future<void> setEffortScale(String value) async {
+    final normalized = value == 'rir' ? 'rir' : 'rpe';
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_effortScaleKey, value == 'rir' ? 'rir' : 'rpe');
+    await prefs.setString(_effortScaleKey, normalized);
+    await _syncEffortScaleToDatabase(normalized);
+  }
+
+  Future<void> _syncEffortScaleToDatabase(String value) async {
+    try {
+      final db = await AppDatabase.instance.database;
+      await db.insert(
+        'app_settings',
+        {'setting_key': 'effort_scale', 'setting_value': value},
+        conflictAlgorithm: 5,
+      );
+    } catch (_) {
+      // Preference must remain usable even if the database is unavailable.
+    }
   }
 
   Future<bool> keepAwakeDuringWorkout() async {
