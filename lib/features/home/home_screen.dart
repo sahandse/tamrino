@@ -8,6 +8,7 @@ import '../../core/database/workout_repository.dart';
 import '../exercises/exercises_screen.dart';
 import '../progress/progress_screen.dart';
 import '../progress/training_calendar_screen.dart';
+import '../settings/advanced_workout_tools_screen.dart';
 import '../settings/workout_reminders_screen.dart';
 import '../workouts/workout_session_screen.dart';
 import '../workouts/workouts_screen.dart';
@@ -304,6 +305,13 @@ class _SettingsPageState extends State<_SettingsPage> {
           title: 'یادآوری تمرین',
           subtitle: 'اعلان هفتگی برنامه‌ها',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkoutRemindersScreen())),
+        ),
+        const SizedBox(height: 10),
+        _SettingTile(
+          icon: Icons.tune_rounded,
+          title: 'ابزارهای پیشرفته',
+          subtitle: 'کاردیو، RIR/RPE، 1RM، Share/Import و تنظیمات تمرین',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdvancedWorkoutToolsScreen())),
         ),
         const SizedBox(height: 10),
         _SettingTile(
