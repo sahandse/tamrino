@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../database/app_database.dart';
 
@@ -43,7 +44,7 @@ class AppPreferences {
       await db.insert(
         'app_settings',
         {'setting_key': 'effort_scale', 'setting_value': value},
-        conflictAlgorithm: 5,
+        conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (_) {
       // Preference must remain usable even if the database is unavailable.
