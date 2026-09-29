@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/database/advanced_workout_repository.dart';
 import '../../core/database/workout_repository.dart';
+import 'session_extra_tools_screen.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   const SessionDetailScreen({super.key, required this.session});
@@ -121,7 +122,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   Text('ویرایش ست', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: setType,
+                    initialValue: setType,
                     decoration: const InputDecoration(labelText: 'نوع ست'),
                     items: const [
                       DropdownMenuItem(value: 'normal', child: Text('معمولی')),
@@ -144,7 +145,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   Row(children: [
                     Expanded(child: TextField(controller: durationSeconds, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مدت (ثانیه)'))),
                     const SizedBox(width: 10),
-                    Expanded(child: TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE'))),
+                    Expanded(child: TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: (set['effort_scale'] as String? ?? 'rpe').toUpperCase()))),
                   ]),
                   const SizedBox(height: 16),
                   FilledButton(
@@ -211,7 +212,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               Row(children: [
                 Expanded(child: TextField(controller: durationSeconds, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مدت (ثانیه)'))),
                 const SizedBox(width: 10),
-                Expanded(child: TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'RPE'))),
+                Expanded(child: TextField(controller: rpe, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: (sample['effort_scale'] as String? ?? 'rpe').toUpperCase()))),
               ]),
               const SizedBox(height: 16),
               FilledButton(
@@ -239,12 +240,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sessionName = (widget.session['plan_name'] as String?) ?? 'تمرین آزاد';
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('جزئیات تمرین'),
-          actions: [IconButton(onPressed: _editTime, icon: const Icon(Icons.edit_calendar_rounded), tooltip: 'ویرایش زمان')],
+          actions: [
+            IconButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => SessionExtraToolsScreen(
+                  sessionId: sessionId,
+                  sessionName: sessionName,
+                ),
+              )),
+              icon: const Icon(Icons.more_horiz_rounded),
+              tooltip: 'ابزارهای جلسه',
+            ),
+            IconButton(onPressed: _editTime, icon: const Icon(Icons.edit_calendar_rounded), tooltip: 'ویرایش زمان'),
+          ],
         ),
         body: FutureBuilder<List<Map<String, Object?>>>(
           future: repo.getSessionSets(sessionId),
@@ -259,7 +273,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text((widget.session['plan_name'] as String?) ?? 'تمرین آزاد', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                Text(sessionName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 12),
                 Wrap(spacing: 10, runSpacing: 10, children: [
                   _Metric(icon: Icons.check_circle_outline_rounded, label: '${sets.length} ست'),
@@ -287,16 +301,33 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                                 IconButton(onPressed: () => _addSetForExercise(entry.value), icon: const Icon(Icons.add_rounded), tooltip: 'افزودن ست'),
                               ]),
                               const SizedBox(height: 6),
-                              ...entry.value.map((set) => ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
-                                    title: Text(set['duration_seconds'] != null
-                                        ? '${set['duration_seconds']} ثانیه${set['weight'] != null ? ' • ${set['weight']} kg' : ''}'
-                                        : '${set['reps'] ?? '—'} تکرار × ${set['weight'] ?? '—'} kg'),
-                                    subtitle: set['rpe'] != null ? Text('RPE ${set['rpe']}') : null,
-                                    trailing: const Icon(Icons.edit_outlined),
-                                    onTap: () => _editSet(set),
-                                  )),
+                              ...entry.value.map((set) {
+                                final effortScale = (set['effort_scale'] as String? ?? 'rpe').toUpperCase();
+                                final distance = (set['cardio_distance'] as num?)?.toDouble();
+                                final speed = (set['cardio_speed'] as num?)?.toDouble();
+                                final durationSeconds = (set['duration_seconds'] as num?)?.toInt();
+                                String title;
+                                if (distance != null || speed != null) {
+                                  final parts = <String>[
+                                    if (durationSeconds != null) '$durationSeconds ثانیه',
+                                    if (distance != null) '${_formatNumber(distance)} km',
+                                    if (speed != null) '${_formatNumber(speed)} km/h',
+                                  ];
+                                  title = parts.join(' • ');
+                                } else if (durationSeconds != null) {
+                                  title = '$durationSeconds ثانیه${set['weight'] != null ? ' • ${set['weight']} kg' : ''}';
+                                } else {
+                                  title = '${set['reps'] ?? '—'} تکرار × ${set['weight'] ?? '—'} kg';
+                                }
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: CircleAvatar(radius: 16, child: Text('${set['set_number']}')),
+                                  title: Text(title),
+                                  subtitle: set['rpe'] != null ? Text('$effortScale ${set['rpe']}') : null,
+                                  trailing: const Icon(Icons.edit_outlined),
+                                  onTap: () => _editSet(set),
+                                );
+                              }),
                             ]),
                           ),
                         ),
